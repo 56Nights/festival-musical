@@ -1,15 +1,19 @@
 """
 DÉMO COMPLÈTE — exécute tout le système de bout en bout.
 
-    python run_demo.py
+    uv run python run_demo.py
 
 Étapes :
-  1. Génération des données simulées          (Compétence 2)
-  2. Entraînement du Transformer d'affluence  (Compétences 1, 3)
-  3. Entraînement du CNN multi-tâches         (Compétences 1, 3)
-  4. Boucle de contrôle intégrée              (intégration des 4 modules)
-  5. Évaluation de scénarios par MAS          (Compétence 3)
-  6. Génération du dashboard HTML             (Compétence 5)
+  1. Génération des données simulées             (Compétence 2)
+  2. Prévision zéro-shot TimesFM — pas d'entraînement (Compétences 1, 3)
+  3. Têtes du CNN ResNet18 — entraînées UNE fois puis rechargées
+  4. Boucle de contrôle intégrée                 (intégration des 4 modules)
+  5. Évaluation de scénarios par MAS             (Compétence 3)
+  6. Dashboard HTML                              (Compétence 5)
+  7. Narration LLM — rapport de situation        (Compétence 5)
+
+Les poids du CNN (outputs/vision_cnn.pt) sont réutilisés s'ils existent :
+supprimez le fichier pour forcer un ré-entraînement (~30 s, têtes seules).
 """
 import json, os, sys, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -24,19 +28,22 @@ from data.generate_data import generate
 generate()
 
 print("\n" + "=" * 60)
-print("2/7  Entraînement du Transformer (prévision d'affluence)")
+print("2/7  Prévision d'affluence — TimesFM zéro-shot (aucun entraînement)")
 print("=" * 60)
-from forecasting.train import train as train_forecaster
-train_forecaster()
+from forecasting.timesfm_forecaster import ZeroShotForecaster
+print(f"backend : {ZeroShotForecaster().backend}")
 
 print("\n" + "=" * 60)
-print("3/7  Entraînement du CNN multi-tâches (vision)")
+print("3/7  CNN ResNet18 — têtes multi-tâches")
 print("=" * 60)
-from vision.train import train as train_cnn
-train_cnn()
+if os.path.exists(C.VISION_MODEL):
+    print(f"poids trouvés ({C.VISION_MODEL}) — entraînement sauté")
+else:
+    from vision.train import train as train_cnn
+    train_cnn()
 
 print("\n" + "=" * 60)
-print("4/7  Boucle de contrôle intégrée (Transformer + CNN + CSP)")
+print("4/7  Boucle de contrôle intégrée (TimesFM + CNN + CSP)")
 print("=" * 60)
 from integration.pipeline import run_control_loop
 log = run_control_loop()

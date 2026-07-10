@@ -1,48 +1,67 @@
 """
-CNN multi-tâches : un backbone partagé, trois têtes.
+CNN multi-tâches — backbone ResNet18 (transfert d'apprentissage).
 
-  frame -> backbone convolutionnel
-             ├── tête 1 : densité de foule   (régression, 0..1)
-             ├── tête 2 : personne au sol    (classification binaire)
-             └── tête 3 : objet suspect      (classification binaire, POC)
+  frame -> ResNet18 (pré-entraîné ImageNet, GELÉ)
+             └─ features 512-d
+                  ├── tête 1 : densité de foule   (régression, 0..1)
+                  ├── tête 2 : personne au sol    (classification binaire)
+                  └── tête 3 : objet suspect      (classification binaire, POC)
 
 Justification (Compétence 3) :
-- backbone partagé = une seule passe d'inférence par frame
-- taux d'échantillonnage découplés par tête (10 fps chute, 1 fps objet)
-- la tête "objet suspect" (ex. seringue) est un proof of concept entraîné
-  sur données synthétiques — limites explicitées dans le rapport.
+- transfert d'apprentissage : les features visuelles génériques d'ImageNet
+  (contours, textures, formes) sont réutilisées — seules les 3 petites têtes
+  sont entraînées, ce qui rend l'entraînement quasi instantané même sur CPU
+  (les features du dataset sont pré-calculées en un seul forward pass).
+- si les poids ImageNet ne sont pas téléchargeables (hors-ligne), le backbone
+  est initialisé aléatoirement et dégelé : le code reste fonctionnel.
 """
 import torch
 import torch.nn as nn
+from torchvision.models import resnet18
+
+try:
+    from torchvision.models import ResNet18_Weights
+    _WEIGHTS = ResNet18_Weights.IMAGENET1K_V1
+except ImportError:                              # anciennes versions
+    _WEIGHTS = None
 
 
-def _block(cin, cout):
-    return nn.Sequential(
-        nn.Conv2d(cin, cout, 3, padding=1), nn.BatchNorm2d(cout), nn.ReLU(),
-        nn.Conv2d(cout, cout, 3, padding=1), nn.BatchNorm2d(cout), nn.ReLU(),
-        nn.MaxPool2d(2))
+def _head():
+    return nn.Sequential(nn.Linear(512, 64), nn.ReLU(),
+                         nn.Dropout(0.2), nn.Linear(64, 1))
 
 
 class MultiTaskCrowdCNN(nn.Module):
-    def __init__(self):
+    def __init__(self, pretrained: bool = True):
         super().__init__()
-        self.backbone = nn.Sequential(
-            _block(3, 16), _block(16, 32), _block(32, 64))
-        # avg pool = signal global (densité) ; max pool = petits objets saillants
-        self.avg = nn.AdaptiveAvgPool2d(1)
-        self.max = nn.AdaptiveMaxPool2d(1)
-        self.density_head = nn.Sequential(
-            nn.Linear(128, 32), nn.ReLU(), nn.Linear(32, 1), nn.Sigmoid())
-        self.fallen_head = nn.Sequential(
-            nn.Linear(128, 32), nn.ReLU(), nn.Linear(32, 1))
-        self.object_head = nn.Sequential(
-            nn.Linear(128, 32), nn.ReLU(), nn.Linear(32, 1))
+        self.pretrained = False
+        net = None
+        if pretrained:
+            try:
+                net = resnet18(weights=_WEIGHTS)
+                self.pretrained = True
+            except Exception as exc:             # pas de réseau
+                print(f"[vision] poids ImageNet indisponibles "
+                      f"({type(exc).__name__}) -> init aléatoire")
+        if net is None:
+            net = resnet18(weights=None)
 
-    def forward(self, x):
-        f = self.backbone(x)
-        z = torch.cat([self.avg(f).flatten(1), self.max(f).flatten(1)], dim=1)
+        self.backbone = nn.Sequential(*list(net.children())[:-1],
+                                      nn.Flatten())          # -> (B, 512)
+        if self.pretrained:                       # transfert : backbone gelé
+            for p in self.backbone.parameters():
+                p.requires_grad = False
+
+        self.density_head = nn.Sequential(_head(), nn.Sigmoid())
+        self.fallen_head = _head()                # logits
+        self.object_head = _head()                # logits
+
+    def heads(self, z):
         return {
             "density": self.density_head(z).squeeze(-1),
-            "fallen": self.fallen_head(z).squeeze(-1),   # logits
-            "object": self.object_head(z).squeeze(-1),   # logits
+            "fallen": self.fallen_head(z).squeeze(-1),
+            "object": self.object_head(z).squeeze(-1),
         }
+
+    def forward(self, x):
+        return self.heads(self.backbone(x))

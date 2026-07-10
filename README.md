@@ -21,7 +21,8 @@ open outputs/dashboard.html
                        └──────┬──────────────┬───────┘
                               │              │
               ┌───────────────▼──┐    ┌──────▼───────────────┐
-              │  TRANSFORMER     │    │  CNN MULTI-TÂCHES    │
+              │  TimesFM         │    │  CNN ResNet18        │
+              │  zéro-shot,      │    │  (ImageNet gelé)     │
               │  prévision 2h    │    │  densité · chute ·   │
               │  par zone        │    │  objet suspect (POC) │
               └───────┬──────────┘    └──────┬───────────────┘
@@ -80,8 +81,8 @@ python narration/llm_narrator.py # sortie : outputs/situation_report.md
 | Dossier | Contenu | Problématique du sujet |
 |---|---|---|
 | `data/` | Génération des données simulées (affluence, incidents) | Environnement simulé |
-| `forecasting/` | Transformer encoder multi-horizon | 📈 Prévision de l'affluence |
-| `vision/` | CNN multi-tâches (3 têtes, backbone partagé) | ⚠️ Détection de situations anormales |
+| `forecasting/` | TimesFM zéro-shot (repli saisonnier-naïf) | 📈 Prévision de l'affluence |
+| `vision/` | ResNet18 pré-entraîné gelé + 3 têtes | ⚠️ Détection de situations anormales |
 | `allocation/` | CSP dynamique OR-Tools CP-SAT | 🔧 Allocation des ressources |
 | `simulation/` | Simulation multi-agents SimPy + Monte-Carlo | 🧪 Évaluation de scénarios |
 | `integration/` | Boucle de contrôle reliant les 4 modules | Cohérence du système |
@@ -90,8 +91,9 @@ python narration/llm_narrator.py # sortie : outputs/situation_report.md
 
 ## Résultats de la démo
 
-- **Transformer** : MAE ≈ 3,5 % de la capacité sur la validation (split temporel)
-- **CNN** : densité MAE ≈ 0,05–0,10 · chute 100 % · objet 99 % (données synthétiques)
+- **Prévision** : TimesFM zéro-shot (télécharge ~200 Mo au premier lancement) ;
+  hors-ligne, repli saisonnier-naïf documenté
+- **CNN** : chute ≈ 99 % · objet ≈ 88–99 % · densité MAE ≈ 0,10 (données synthétiques)
 - **Boucle intégrée** : alertes CNN détectées → ré-allocations CSP déclenchées
 - **MAS** : l'allocation CSP réduit le pire temps de réponse p95 de ~25 à ~18 min
   vs une allocation uniforme naïve (20 runs Monte-Carlo, incidents pondérés
@@ -101,10 +103,23 @@ python narration/llm_narrator.py # sortie : outputs/situation_report.md
 
 | Problème | Méthode | Pourquoi |
 |---|---|---|
-| Prévision d'affluence | Transformer encoder | Dépendances temporelles longues (arrivées du matin → pic du soir), covariables connues à l'avance (headliner, heure, météo), sortie multi-horizon |
-| Détection d'anomalies | CNN multi-tâches | Backbone partagé = 1 inférence/frame ; avg-pool pour la densité (signal global), max-pool pour les petits objets saillants ; taux d'échantillonnage découplés par tête |
+| Prévision d'affluence | TimesFM (zéro-shot) | Modèle de fondation pré-entraîné sur ~100 Mds de points : plus robuste qu'un entraînement from scratch sur données simulées limitées ; aucun entraînement local, simple forward CPU |
+| Détection d'anomalies | ResNet18 pré-entraîné + 3 têtes | Transfert d'apprentissage : features ImageNet réutilisées, backbone gelé, seules les têtes sont entraînées (features pré-calculées → quelques secondes sur CPU) |
 | Allocation | CSP (CP-SAT) | Ressources discrètes + contraintes dures (minimums de sécurité) ; contraintes souples avec pénalité de réaffectation pour la stabilité opérationnelle |
 | Évaluation de scénarios | Multi-agents + Monte-Carlo | Comportements émergents non capturables analytiquement ; permet de stress-tester les allocations avant déploiement |
+
+## Entraînement : pourquoi si peu ?
+
+Aucun modèle lourd n'est entraîné localement :
+- **TimesFM** est utilisé en zéro-shot — pas d'entraînement du tout.
+- **ResNet18** est pré-entraîné ImageNet et **gelé** ; seules les 3 têtes
+  (quelques milliers de paramètres) sont entraînées, sur des features
+  pré-calculées — quelques secondes sur CPU.
+- Les poids des têtes (`outputs/vision_cnn.pt`) sont réutilisés d'un
+  lancement à l'autre ; supprimez le fichier pour ré-entraîner.
+- Hors-ligne (checkpoints non téléchargeables), chaque module a un repli
+  documenté : baseline saisonnière pour la prévision, entraînement bout en
+  bout du petit ResNet pour la vision.
 
 ## Limites assumées (à reprendre dans le rapport — Compétence 5)
 

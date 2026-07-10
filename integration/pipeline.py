@@ -20,22 +20,16 @@ import pandas as pd
 import torch
 
 import config as C
-from forecasting.model import AttendanceTransformer
-from forecasting.train import build_features
+from forecasting.timesfm_forecaster import ZeroShotForecaster
 from vision.model import MultiTaskCrowdCNN
 from vision.synthetic_images import make_frame
 from allocation.dynamic_csp import solve_allocation
 
 
 def load_models():
-    ck = torch.load(C.FORECAST_MODEL, weights_only=True)
-    forecaster = AttendanceTransformer(
-        n_features=ck["n_features"], d_model=C.D_MODEL, n_heads=C.N_HEADS,
-        n_layers=C.N_LAYERS, horizon=C.HORIZON)
-    forecaster.load_state_dict(ck["state"])
-    forecaster.eval()
+    forecaster = ZeroShotForecaster()
 
-    cnn = MultiTaskCrowdCNN()
+    cnn = MultiTaskCrowdCNN(pretrained=True)
     cnn.load_state_dict(torch.load(C.VISION_MODEL, weights_only=True))
     cnn.eval()
     return forecaster, cnn
@@ -45,26 +39,26 @@ def run_control_loop(start_step: int = None, n_steps: int = 24):
     """Rejoue n_steps pas de 15 min du dernier jour du festival."""
     df = pd.read_csv(C.DATA_CSV)
     events = pd.read_csv(C.EVENTS_CSV)
-    X = build_features(df)
     forecaster, cnn = load_models()
+
+    # séries d'affluence normalisée par zone (fraction de capacité)
+    series = {z: (df[df.zone == z].sort_values("step").attendance
+                  / C.ZONE_CAPACITY[z]).to_numpy() for z in C.ZONES}
 
     if start_step is None:
         start_step = C.TOTAL_STEPS - C.STEPS_PER_DAY + C.SEQ_LEN  # dernier jour
 
     log = []
     prev_alloc = None
-    zid = {z: i for i, z in enumerate(C.ZONES)}
 
     for step in range(start_step, min(start_step + n_steps, C.TOTAL_STEPS)):
         entry = {"step": step, "alerts": [], "resolved": False}
 
-        # ---- 1. prévision par zone (Transformer) ----
+        # ---- 1. prévision par zone (TimesFM zéro-shot) ----
         forecasts = {}
-        with torch.no_grad():
-            for z in C.ZONES:
-                seq = torch.tensor(X[step - C.SEQ_LEN: step, zid[z], :]).unsqueeze(0)
-                pred = forecaster(seq)[0].clamp(0, 1.2)
-                forecasts[z] = float(pred.max())        # pic à horizon 2h
+        for z in C.ZONES:
+            pred = forecaster.forecast(series[z][:step])
+            forecasts[z] = float(np.max(pred))       # pic à horizon 2h
         entry["forecast_peak"] = {z: round(v, 3) for z, v in forecasts.items()}
 
         # ---- 2. vision (CNN) : une frame simulée par zone ----
@@ -72,7 +66,7 @@ def run_control_loop(start_step: int = None, n_steps: int = 24):
         emergencies = {}
         with torch.no_grad():
             for z in C.ZONES:
-                real_density = X[step, zid[z], 0]
+                real_density = series[z][step]
                 inc = truth[truth["zone"] == z]["type"].tolist()
                 frame = torch.tensor(make_frame(
                     density=float(np.clip(real_density, 0, 1)),
