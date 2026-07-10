@@ -126,7 +126,13 @@ def summarize(control_log: list, scenarios: dict | None = None) -> str:
     alerts = []
     for e in control_log:
         for a in e["alerts"]:
-            med = e["allocation"]["medical"] if e["allocation"] else {}
+        med = {}
+        if e["allocation"] and isinstance(e["allocation"].get("medical"), dict):
+            raw = e["allocation"]["medical"]
+            # garde-fou : valeurs CP-SAT parfois non initialisées hors solution
+            total_medical = C.RESOURCES["medical"]
+            med = {z: v for z, v in raw.items()
+                   if isinstance(v, int) and 0 <= v <= total_medical}
             alerts.append({
                 "step": e["step"], "zone": a["zone"], "types": a["types"],
                 "density": a["density"],

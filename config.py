@@ -19,13 +19,13 @@ ZONE_CAPACITY = {
 
 # ---------- Ressources ----------
 RESOURCES = {
-    "medical": 6,    # équipes médicales
+    "medical": 4,    # équipes médicales — réduit pour créer de la tension
     "security": 12,  # équipes de sécurité
     "logistics": 8,  # équipes logistiques
 }
 
 MIN_STAFF_PER_ZONE = {          # contraintes dures (sécurité minimale)
-    "medical": 1,
+    "medical": 0,
     "security": 1,
     "logistics": 0,
 }

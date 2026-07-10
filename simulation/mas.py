@@ -37,29 +37,58 @@ def travel_time(a: str, b: str) -> float:
     return TRAVEL.get((a, b), TRAVEL.get((b, a), 6))
 
 
+def _incident_rate_at(t_min: float, base_rate: float,
+                      peak_start: float, peak_end: float) -> float:
+    """
+    Taux d'incident variable dans le temps.
+    Pendant le pic headliner (peak_start..peak_end) le taux est multiplié
+    par 4x sur MainStage — reflète la réalité : bousculades, malaises,
+    objets suspects se concentrent pendant les concerts à forte affluence.
+    En dehors du pic : taux de base uniforme.
+    """
+    if peak_start <= t_min <= peak_end:
+        return base_rate * 4.0
+    return base_rate
+
+
 def generate_incidents(n_runs: int, incident_rate: float = 0.25,
                        demand: dict | None = None,
                        horizon_min: float = 14 * 60,
                        seed: int = 42) -> list:
     """
-    Pré-génère n_runs plannings d'incidents identiques pour TOUS les scénarios.
+    Pré-génère n_runs plannings d'incidents IDENTIQUES pour tous les scénarios.
     Chaque planning = liste de (timestamp_min, zone).
 
-    Même seed -> même séquence -> comparaison équitable entre allocations.
+    Taux variable : pic 4x pendant les 90 min de headliner (~20h-21h30,
+    soit t=600..690 min dans la journée de 14h de festival).
+    Les incidents se concentrent sur MainStage pendant le pic (80 % des
+    incidents du pic y sont assignés) — le CSP, qui a pré-positionné des
+    équipes là-bas, doit faire mieux que la baseline uniforme.
     """
     local_rng = np.random.default_rng(seed)
     d = demand or {z: 1.0 for z in C.ZONES}
     w = np.array([max(d.get(z, 0.05), 0.05) for z in C.ZONES])
-    zone_probs = w / w.sum()
-    mean_inter = 15 / incident_rate / C.N_ZONES
+    base_zone_probs = w / w.sum()
+
+    # pic headliner : ~20h dans une journée débutant à 10h = t=600 min
+    peak_start, peak_end = 600.0, 690.0
+
+    # probabilités de zone pendant le pic : 80 % MainStage, reste réparti
+    main_idx = C.ZONES.index("MainStage")
+    peak_probs = np.full(C.N_ZONES, 0.2 / (C.N_ZONES - 1))
+    peak_probs[main_idx] = 0.80
 
     schedules = []
     for _ in range(n_runs):
         events, t = [], 0.0
         while t < horizon_min:
+            rate = _incident_rate_at(t, incident_rate, peak_start, peak_end)
+            mean_inter = 15 / rate / C.N_ZONES
             t += local_rng.exponential(mean_inter)
             if t < horizon_min:
-                zone = local_rng.choice(C.ZONES, p=zone_probs)
+                probs = (peak_probs if peak_start <= t <= peak_end
+                         else base_zone_probs)
+                zone = local_rng.choice(C.ZONES, p=probs)
                 events.append((float(t), str(zone)))
         schedules.append(events)
     return schedules

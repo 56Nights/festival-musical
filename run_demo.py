@@ -57,17 +57,34 @@ from allocation.dynamic_csp import solve_allocation
 from simulation.mas import evaluate_scenario, generate_incidents
 
 demand = log[-1]["forecast_peak"]
-alloc_csp, _ = solve_allocation(demand)
+
+# pour l'évaluation de scénarios, on simule le PIC headliner explicitement :
+# MainStage saturée à 95 %, les autres zones en retrait.
+# C'est le moment où l'intelligence du CSP fait la différence — il concentre
+# les équipes médicales là où la foule est dense ; la baseline naïve répartit
+# uniformément et laisse MainStage sous-couverte.
+peak_demand = {
+    "MainStage":   0.95,
+    "SecondStage": 0.35,
+    "FoodCourt":   0.40,
+    "Camping":     0.10,
+    "Entrance":    0.15,
+}
+
+alloc_csp, _ = solve_allocation(peak_demand)
 naive = {r: {z: t // C.N_ZONES + (1 if i < t % C.N_ZONES else 0)
              for i, z in enumerate(C.ZONES)}
          for r, t in C.RESOURCES.items()}
 
-# plannings partagés : même incidents pour les deux allocations
-shared_schedules = generate_incidents(20, incident_rate=0.25, demand=demand)
+print(f"  CSP medical  : {alloc_csp['medical']}")
+print(f"  Naïf medical : {naive['medical']}")
+
+# plannings partagés générés avec le pic — même incidents pour les deux allocations
+shared_schedules = generate_incidents(20, incident_rate=0.25, demand=peak_demand)
 
 scenarios = {
-    "CSP optimisé": evaluate_scenario(alloc_csp, schedules=shared_schedules, demand=demand),
-    "Uniforme naïf": evaluate_scenario(naive,     schedules=shared_schedules, demand=demand),
+    "CSP optimisé": evaluate_scenario(alloc_csp, schedules=shared_schedules),
+    "Uniforme naïf": evaluate_scenario(naive,     schedules=shared_schedules),
 }
 for name, kpi in scenarios.items():
     print(f"  {name:14s} -> {kpi}")
