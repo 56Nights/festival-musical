@@ -1,0 +1,14 @@
+step,zone,type
+41,SecondStage,fallen_person
+46,MainStage,fallen_person
+52,SecondStage,crowd_surge
+72,SecondStage,suspicious_object
+80,FoodCourt,fallen_person
+93,SecondStage,fallen_person
+109,MainStage,crowd_surge
+112,SecondStage,fallen_person
+123,MainStage,fallen_person
+141,MainStage,fallen_person
+147,FoodCourt,suspicious_object
+153,SecondStage,crowd_surge
+161,MainStage,crowd_surge

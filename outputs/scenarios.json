@@ -1,0 +1,16 @@
+{
+ "CSP optimis\u00e9": {
+  "runs": 20,
+  "mean_response_min": 10.22,
+  "worst_p95_min": 18.5,
+  "total_uncovered": 0,
+  "total_incidents": 1461
+ },
+ "Uniforme na\u00eff": {
+  "runs": 20,
+  "mean_response_min": 10.54,
+  "worst_p95_min": 25.37,
+  "total_uncovered": 0,
+  "total_incidents": 1432
+ }
+}

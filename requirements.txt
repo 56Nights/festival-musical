@@ -1,0 +1,7 @@
+torch
+ortools
+simpy
+plotly
+pandas
+numpy
+scikit-learn
