@@ -54,7 +54,7 @@ print("\n" + "=" * 60)
 print("5/7  Évaluation de scénarios (simulation multi-agents)")
 print("=" * 60)
 from allocation.dynamic_csp import solve_allocation
-from simulation.mas import evaluate_scenario
+from simulation.mas import evaluate_scenario, generate_incidents
 
 demand = log[-1]["forecast_peak"]
 alloc_csp, _ = solve_allocation(demand)
@@ -62,9 +62,12 @@ naive = {r: {z: t // C.N_ZONES + (1 if i < t % C.N_ZONES else 0)
              for i, z in enumerate(C.ZONES)}
          for r, t in C.RESOURCES.items()}
 
+# plannings partagés : même incidents pour les deux allocations
+shared_schedules = generate_incidents(20, incident_rate=0.25, demand=demand)
+
 scenarios = {
-    "CSP optimisé": evaluate_scenario(alloc_csp, incident_rate=0.25, demand=demand),
-    "Uniforme naïf": evaluate_scenario(naive, incident_rate=0.25, demand=demand),
+    "CSP optimisé": evaluate_scenario(alloc_csp, schedules=shared_schedules, demand=demand),
+    "Uniforme naïf": evaluate_scenario(naive,     schedules=shared_schedules, demand=demand),
 }
 for name, kpi in scenarios.items():
     print(f"  {name:14s} -> {kpi}")

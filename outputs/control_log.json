@@ -1,15 +1,7 @@
 [
  {
   "step": 136,
-  "alerts": [
-   {
-    "zone": "FoodCourt",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.2
-   }
-  ],
+  "alerts": [],
   "resolved": true,
   "forecast_peak": {
    "MainStage": 0.332,
@@ -17,6 +9,968 @@
    "FoodCourt": 0.222,
    "Camping": 0.399,
    "Entrance": 0.0
+  },
+  "trigger": "periodic",
+  "allocation": {
+   "medical": {
+    "MainStage": 1,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 2,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 137,
+  "alerts": [],
+  "resolved": false,
+  "forecast_peak": {
+   "MainStage": 0.366,
+   "SecondStage": 0.28,
+   "FoodCourt": 0.223,
+   "Camping": 0.381,
+   "Entrance": 0.001
+  },
+  "allocation": {
+   "medical": {
+    "MainStage": 1,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 2,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  }
+ },
+ {
+  "step": 138,
+  "alerts": [],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 0.405,
+   "SecondStage": 0.254,
+   "FoodCourt": 0.228,
+   "Camping": 0.344,
+   "Entrance": 0.001
+  },
+  "trigger": "periodic",
+  "allocation": {
+   "medical": {
+    "MainStage": 1,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 2,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 139,
+  "alerts": [],
+  "resolved": false,
+  "forecast_peak": {
+   "MainStage": 0.341,
+   "SecondStage": 0.272,
+   "FoodCourt": 0.219,
+   "Camping": 0.338,
+   "Entrance": 0.001
+  },
+  "allocation": {
+   "medical": {
+    "MainStage": 1,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 2,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  }
+ },
+ {
+  "step": 140,
+  "alerts": [
+   {
+    "zone": "MainStage",
+    "types": [
+     "fallen_person"
+    ],
+    "density": 0.27
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 0.376,
+   "SecondStage": 0.406,
+   "FoodCourt": 0.226,
+   "Camping": 0.337,
+   "Entrance": 0.003
+  },
+  "trigger": "event",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 2,
+    "Entrance": 0
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 141,
+  "alerts": [
+   {
+    "zone": "MainStage",
+    "types": [
+     "fallen_person"
+    ],
+    "density": 0.35
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 0.309,
+   "SecondStage": 0.392,
+   "FoodCourt": 0.238,
+   "Camping": 0.317,
+   "Entrance": 0.125
+  },
+  "trigger": "event",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 2,
+    "Entrance": 0
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 142,
+  "alerts": [],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 0.367,
+   "SecondStage": 0.463,
+   "FoodCourt": 0.245,
+   "Camping": 0.315,
+   "Entrance": 0.129
+  },
+  "trigger": "periodic",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 143,
+  "alerts": [
+   {
+    "zone": "FoodCourt",
+    "types": [
+     "suspicious_object"
+    ],
+    "density": 0.2
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 0.397,
+   "SecondStage": 0.347,
+   "FoodCourt": 0.28,
+   "Camping": 0.286,
+   "Entrance": 0.121
+  },
+  "trigger": "event",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 144,
+  "alerts": [],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 0.601,
+   "SecondStage": 0.624,
+   "FoodCourt": 0.302,
+   "Camping": 0.256,
+   "Entrance": 0.124
+  },
+  "trigger": "periodic",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 145,
+  "alerts": [
+   {
+    "zone": "MainStage",
+    "types": [
+     "fallen_person"
+    ],
+    "density": 0.68
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 0.778,
+   "SecondStage": 0.565,
+   "FoodCourt": 0.354,
+   "Camping": 0.233,
+   "Entrance": 0.118
+  },
+  "trigger": "event",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 146,
+  "alerts": [
+   {
+    "zone": "MainStage",
+    "types": [
+     "fallen_person"
+    ],
+    "density": 0.57
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 0.693,
+   "SecondStage": 0.556,
+   "FoodCourt": 0.408,
+   "Camping": 0.226,
+   "Entrance": 0.125
+  },
+  "trigger": "event",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 147,
+  "alerts": [
+   {
+    "zone": "MainStage",
+    "types": [
+     "fallen_person"
+    ],
+    "density": 0.66
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 0.692,
+   "SecondStage": 0.63,
+   "FoodCourt": 0.445,
+   "Camping": 0.248,
+   "Entrance": 0.115
+  },
+  "trigger": "event",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 148,
+  "alerts": [
+   {
+    "zone": "MainStage",
+    "types": [
+     "fallen_person"
+    ],
+    "density": 0.8
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 0.843,
+   "SecondStage": 0.717,
+   "FoodCourt": 0.418,
+   "Camping": 0.244,
+   "Entrance": 0.122
+  },
+  "trigger": "event",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 149,
+  "alerts": [],
+  "resolved": false,
+  "forecast_peak": {
+   "MainStage": 0.811,
+   "SecondStage": 0.754,
+   "FoodCourt": 0.502,
+   "Camping": 0.223,
+   "Entrance": 0.118
+  },
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  }
+ },
+ {
+  "step": 150,
+  "alerts": [
+   {
+    "zone": "MainStage",
+    "types": [
+     "crowd_surge"
+    ],
+    "density": 0.98
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 0.727,
+   "SecondStage": 0.663,
+   "FoodCourt": 0.546,
+   "Camping": 0.279,
+   "Entrance": 0.128
+  },
+  "trigger": "event",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 151,
+  "alerts": [
+   {
+    "zone": "MainStage",
+    "types": [
+     "suspicious_object"
+    ],
+    "density": 0.78
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 1.176,
+   "SecondStage": 0.392,
+   "FoodCourt": 0.61,
+   "Camping": 0.19,
+   "Entrance": 0.125
+  },
+  "trigger": "event",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 152,
+  "alerts": [
+   {
+    "zone": "MainStage",
+    "types": [
+     "crowd_surge"
+    ],
+    "density": 0.91
+   },
+   {
+    "zone": "SecondStage",
+    "types": [
+     "fallen_person"
+    ],
+    "density": 0.38
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 1.2,
+   "SecondStage": 0.433,
+   "FoodCourt": 0.618,
+   "Camping": 0.172,
+   "Entrance": 0.124
+  },
+  "trigger": "event",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 2,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 0
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 153,
+  "alerts": [
+   {
+    "zone": "MainStage",
+    "types": [
+     "crowd_surge"
+    ],
+    "density": 0.93
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 1.026,
+   "SecondStage": 0.428,
+   "FoodCourt": 0.612,
+   "Camping": 0.147,
+   "Entrance": 0.129
+  },
+  "trigger": "event",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 2,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 0
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 154,
+  "alerts": [],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 1.2,
+   "SecondStage": 0.466,
+   "FoodCourt": 0.637,
+   "Camping": 0.168,
+   "Entrance": 0.126
+  },
+  "trigger": "forecast",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 155,
+  "alerts": [
+   {
+    "zone": "MainStage",
+    "types": [
+     "crowd_surge"
+    ],
+    "density": 0.94
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 1.193,
+   "SecondStage": 0.426,
+   "FoodCourt": 0.66,
+   "Camping": 0.175,
+   "Entrance": 0.122
+  },
+  "trigger": "event",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 156,
+  "alerts": [],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 1.12,
+   "SecondStage": 0.425,
+   "FoodCourt": 0.752,
+   "Camping": 0.203,
+   "Entrance": 0.122
+  },
+  "trigger": "forecast",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 157,
+  "alerts": [],
+  "resolved": false,
+  "forecast_peak": {
+   "MainStage": 0.67,
+   "SecondStage": 0.569,
+   "FoodCourt": 0.683,
+   "Camping": 0.208,
+   "Entrance": 0.121
+  },
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  }
+ },
+ {
+  "step": 158,
+  "alerts": [
+   {
+    "zone": "MainStage",
+    "types": [
+     "fallen_person"
+    ],
+    "density": 0.56
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 0.539,
+   "SecondStage": 0.554,
+   "FoodCourt": 0.7,
+   "Camping": 0.238,
+   "Entrance": 0.117
+  },
+  "trigger": "event",
+  "allocation": {
+   "medical": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 1,
+    "Camping": 1,
+    "Entrance": 1
+   },
+   "security": {
+    "MainStage": 3,
+    "SecondStage": 2,
+    "FoodCourt": 2,
+    "Camping": 4,
+    "Entrance": 1
+   },
+   "logistics": {
+    "MainStage": 2,
+    "SecondStage": 1,
+    "FoodCourt": 2,
+    "Camping": 3,
+    "Entrance": 0
+   }
+  },
+  "solver_status": "OPTIMAL"
+ },
+ {
+  "step": 159,
+  "alerts": [
+   {
+    "zone": "FoodCourt",
+    "types": [
+     "fallen_person"
+    ],
+    "density": 0.72
+   }
+  ],
+  "resolved": true,
+  "forecast_peak": {
+   "MainStage": 0.483,
+   "SecondStage": 0.584,
+   "FoodCourt": 0.754,
+   "Camping": 0.286,
+   "Entrance": 0.119
   },
   "trigger": "event",
   "allocation": {
@@ -43,1000 +997,5 @@
    }
   },
   "solver_status": "OPTIMAL"
- },
- {
-  "step": 137,
-  "alerts": [
-   {
-    "zone": "SecondStage",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.11
-   },
-   {
-    "zone": "Entrance",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.04
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.366,
-   "SecondStage": 0.28,
-   "FoodCourt": 0.223,
-   "Camping": 0.381,
-   "Entrance": 0.001
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 1,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1005736946,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 138,
-  "alerts": [],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.405,
-   "SecondStage": 0.254,
-   "FoodCourt": 0.228,
-   "Camping": 0.344,
-   "Entrance": 0.001
-  },
-  "trigger": "periodic",
-  "allocation": {
-   "medical": {
-    "MainStage": 8589934593,
-    "SecondStage": 4294967296,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 4294967297,
-    "FoodCourt": 4294967296,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1618980626,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 139,
-  "alerts": [],
-  "resolved": false,
-  "forecast_peak": {
-   "MainStage": 0.341,
-   "SecondStage": 0.272,
-   "FoodCourt": 0.219,
-   "Camping": 0.338,
-   "Entrance": 0.001
-  },
-  "allocation": {
-   "medical": {
-    "MainStage": 8589934593,
-    "SecondStage": 4294967296,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 4294967297,
-    "FoodCourt": 4294967296,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1618980626,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  }
- },
- {
-  "step": 140,
-  "alerts": [
-   {
-    "zone": "Entrance",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.09
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.376,
-   "SecondStage": 0.406,
-   "FoodCourt": 0.226,
-   "Camping": 0.337,
-   "Entrance": 0.003
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 8389759023090791278,
-    "SecondStage": 7596457915691565056,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 6715183893564825658,
-    "FoodCourt": 7593470770232164352,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1005735106,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 141,
-  "alerts": [
-   {
-    "zone": "SecondStage",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.33
-   },
-   {
-    "zone": "Camping",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.32
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.309,
-   "SecondStage": 0.392,
-   "FoodCourt": 0.238,
-   "Camping": 0.317,
-   "Entrance": 0.125
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 8389759023090791278,
-    "SecondStage": 7596457915691565056,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 746807127463516960,
-    "FoodCourt": 7955997337506021376,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1618969186,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 142,
-  "alerts": [
-   {
-    "zone": "MainStage",
-    "types": [
-     "suspicious_object"
-    ],
-    "density": 0.25
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.367,
-   "SecondStage": 0.463,
-   "FoodCourt": 0.245,
-   "Camping": 0.315,
-   "Entrance": 0.129
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 35607035699801181,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1002415120,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1000592930,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 143,
-  "alerts": [
-   {
-    "zone": "SecondStage",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.36
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.397,
-   "SecondStage": 0.347,
-   "FoodCourt": 0.28,
-   "Camping": 0.286,
-   "Entrance": 0.121
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 8383285231528598828,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1619000128,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1047956002,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 144,
-  "alerts": [
-   {
-    "zone": "MainStage",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.53
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.601,
-   "SecondStage": 0.624,
-   "FoodCourt": 0.302,
-   "Camping": 0.256,
-   "Entrance": 0.124
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 8394812389667405417,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1120745200,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1042222306,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 145,
-  "alerts": [
-   {
-    "zone": "Entrance",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.08
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.778,
-   "SecondStage": 0.565,
-   "FoodCourt": 0.354,
-   "Camping": 0.233,
-   "Entrance": 0.118
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 35607035699801181,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1002415120,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1074774402,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 146,
-  "alerts": [],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.693,
-   "SecondStage": 0.556,
-   "FoodCourt": 0.408,
-   "Camping": 0.226,
-   "Entrance": 0.125
-  },
-  "trigger": "periodic",
-  "allocation": {
-   "medical": {
-    "MainStage": 8383285231528598828,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 941151152,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1619004594,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 147,
-  "alerts": [],
-  "resolved": false,
-  "forecast_peak": {
-   "MainStage": 0.692,
-   "SecondStage": 0.63,
-   "FoodCourt": 0.445,
-   "Camping": 0.248,
-   "Entrance": 0.115
-  },
-  "allocation": {
-   "medical": {
-    "MainStage": 8383285231528598828,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 941151152,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1619004594,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  }
- },
- {
-  "step": 148,
-  "alerts": [],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.843,
-   "SecondStage": 0.717,
-   "FoodCourt": 0.418,
-   "Camping": 0.244,
-   "Entrance": 0.122
-  },
-  "trigger": "periodic",
-  "allocation": {
-   "medical": {
-    "MainStage": 8394812389667405417,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1619007712,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1619004482,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 149,
-  "alerts": [
-   {
-    "zone": "SecondStage",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.74
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.811,
-   "SecondStage": 0.754,
-   "FoodCourt": 0.502,
-   "Camping": 0.223,
-   "Entrance": 0.118
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 35607035699801181,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1074787776,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1047957970,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 150,
-  "alerts": [
-   {
-    "zone": "MainStage",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.84
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.727,
-   "SecondStage": 0.663,
-   "FoodCourt": 0.546,
-   "Camping": 0.279,
-   "Entrance": 0.128
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 8383285231528598828,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1002415120,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1047958898,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 151,
-  "alerts": [
-   {
-    "zone": "MainStage",
-    "types": [
-     "fallen_person",
-     "crowd_surge"
-    ],
-    "density": 0.95
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 1.176,
-   "SecondStage": 0.392,
-   "FoodCourt": 0.61,
-   "Camping": 0.19,
-   "Entrance": 0.125
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 8394812389667405417,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1619000128,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1005736674,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 152,
-  "alerts": [
-   {
-    "zone": "MainStage",
-    "types": [
-     "crowd_surge"
-    ],
-    "density": 0.87
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 1.2,
-   "SecondStage": 0.433,
-   "FoodCourt": 0.618,
-   "Camping": 0.172,
-   "Entrance": 0.124
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 35607035699801181,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1619000128,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 951713602,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 153,
-  "alerts": [
-   {
-    "zone": "MainStage",
-    "types": [
-     "crowd_surge"
-    ],
-    "density": 0.94
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 1.026,
-   "SecondStage": 0.428,
-   "FoodCourt": 0.612,
-   "Camping": 0.147,
-   "Entrance": 0.129
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 8383285231528598828,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1618214896,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1005736338,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 154,
-  "alerts": [
-   {
-    "zone": "MainStage",
-    "types": [
-     "crowd_surge"
-    ],
-    "density": 0.93
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 1.2,
-   "SecondStage": 0.466,
-   "FoodCourt": 0.637,
-   "Camping": 0.168,
-   "Entrance": 0.126
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 8394812389667405417,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1002415120,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1047957090,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 155,
-  "alerts": [
-   {
-    "zone": "MainStage",
-    "types": [
-     "crowd_surge"
-    ],
-    "density": 0.89
-   },
-   {
-    "zone": "FoodCourt",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.71
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 1.193,
-   "SecondStage": 0.426,
-   "FoodCourt": 0.66,
-   "Camping": 0.175,
-   "Entrance": 0.122
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 35607035699801181,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1005082208,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1764086066,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 156,
-  "alerts": [],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 1.12,
-   "SecondStage": 0.425,
-   "FoodCourt": 0.752,
-   "Camping": 0.203,
-   "Entrance": 0.122
-  },
-  "trigger": "forecast",
-  "allocation": {
-   "medical": {
-    "MainStage": 8383285231528598828,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1619000128,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1074776722,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 157,
-  "alerts": [],
-  "resolved": false,
-  "forecast_peak": {
-   "MainStage": 0.67,
-   "SecondStage": 0.569,
-   "FoodCourt": 0.683,
-   "Camping": 0.208,
-   "Entrance": 0.121
-  },
-  "allocation": {
-   "medical": {
-    "MainStage": 8383285231528598828,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1619000128,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1074776722,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  }
- },
- {
-  "step": 158,
-  "alerts": [
-   {
-    "zone": "MainStage",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.4
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.539,
-   "SecondStage": 0.554,
-   "FoodCourt": 0.7,
-   "Camping": 0.238,
-   "Entrance": 0.117
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 8394812389667405417,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1005082208,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1047960386,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
- },
- {
-  "step": 159,
-  "alerts": [
-   {
-    "zone": "Entrance",
-    "types": [
-     "fallen_person"
-    ],
-    "density": 0.12
-   }
-  ],
-  "resolved": true,
-  "forecast_peak": {
-   "MainStage": 0.483,
-   "SecondStage": 0.584,
-   "FoodCourt": 0.754,
-   "Camping": 0.286,
-   "Entrance": 0.119
-  },
-  "trigger": "event",
-  "allocation": {
-   "medical": {
-    "MainStage": 35607035699801181,
-    "SecondStage": 0,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "security": {
-    "MainStage": 0,
-    "SecondStage": 1002415120,
-    "FoodCourt": 0,
-    "Camping": 0,
-    "Entrance": 0
-   },
-   "logistics": {
-    "MainStage": 0,
-    "SecondStage": 1003484882,
-    "FoodCourt": 129980565520608,
-    "Camping": 0,
-    "Entrance": 0
-   }
-  },
-  "solver_status": "INFEASIBLE"
  }
 ]
