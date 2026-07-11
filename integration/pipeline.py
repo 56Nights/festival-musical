@@ -63,8 +63,54 @@ def _simulate_motion(frame_np: np.ndarray, density: float,
     return (moved.astype(np.float32) / 255).transpose(2, 0, 1)
 
 
-def run_control_loop(start_step: int = None, n_steps: int = 24):
-    """Rejoue n_steps pas de 15 min du dernier jour du festival."""
+def _window(start_step, n_steps):
+    if start_step is None:
+        start_step = C.TOTAL_STEPS - C.STEPS_PER_DAY
+    if n_steps is None:
+        n_steps = C.STEPS_PER_DAY
+    return start_step, n_steps
+
+
+def run_reactive_loop(start_step: int = None, n_steps: int = None):
+    """Scénario « SANS gestion prédictive » (baseline de comparaison).
+
+    Aucun modèle : pas de prévision (donc aucun pré-positionnement), pas de
+    vision (la détection sera HUMAINE, modélisée en aval par `kpis.py`). Le plan
+    d'équipes est FIXE toute la journée (`static_allocation`). On journalise
+    quand même la vérité terrain des incidents pour que l'évaluateur rejoue les
+    MÊMES incidents que le scénario prédictif.
+    """
+    from allocation.dynamic_csp import static_allocation
+    events = pd.read_csv(C.EVENTS_CSV)
+    start_step, n_steps = _window(start_step, n_steps)
+    alloc = static_allocation()
+    log = []
+    for step in range(start_step, min(start_step + n_steps, C.TOTAL_STEPS)):
+        truth = events[events["step"] == step]
+        log.append({
+            "step": step, "alerts": [], "resolved": False,
+            "trigger": None, "forecast_peak": {},
+            "truth_incidents": [{"zone": r.zone, "type": r.type}
+                                for r in truth.itertuples()],
+            "allocation": alloc, "solver_status": "STATIC",
+        })
+    with open(os.path.join(C.OUT, "control_log_reactive.json"), "w") as f:
+        json.dump(log, f, indent=1)
+    return log
+
+
+def run_control_loop(start_step: int = None, n_steps: int = None,
+                     mode: str = "predictive"):
+    """Rejoue le dernier jour COMPLET du festival (10h -> minuit, 56 pas).
+
+    mode="predictive" : pipeline complet (prévision + vision + CSP dynamique).
+    mode="reactive"   : baseline sans gestion prédictive (cf. run_reactive_loop).
+
+    L'historique des deux jours précédents (>> SEQ_LEN) reste disponible pour
+    la prévision TimesFM.
+    """
+    if mode == "reactive":
+        return run_reactive_loop(start_step, n_steps)
     df = pd.read_csv(C.DATA_CSV)
     events = pd.read_csv(C.EVENTS_CSV)
     forecaster, cnn = load_models()
@@ -74,7 +120,9 @@ def run_control_loop(start_step: int = None, n_steps: int = 24):
                   / C.ZONE_CAPACITY[z]).to_numpy() for z in C.ZONES}
 
     if start_step is None:
-        start_step = C.TOTAL_STEPS - C.STEPS_PER_DAY + C.SEQ_LEN
+        start_step = C.TOTAL_STEPS - C.STEPS_PER_DAY   # début du dernier jour
+    if n_steps is None:
+        n_steps = C.STEPS_PER_DAY                       # journée entière
 
     log = []
     prev_alloc = None
@@ -91,6 +139,10 @@ def run_control_loop(start_step: int = None, n_steps: int = 24):
 
         # ---- 2+3. CNN + flux optique par zone ----
         truth = events[events["step"] == step]
+        # vérité terrain des incidents de ce pas (pour la vue simulation :
+        # permet de distinguer visuellement détecté vs manqué)
+        entry["truth_incidents"] = [
+            {"zone": r.zone, "type": r.type} for r in truth.itertuples()]
         emergencies = {}
 
         with torch.no_grad():

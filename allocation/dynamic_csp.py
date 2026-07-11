@@ -28,11 +28,43 @@ import config as C
 SEVERITY = {
     "fallen_person":     3,
     "crowd_surge":       2,
+    "fight":             2,   # bagarre : risque d'escalade rapide (comme un surge)
     "suspicious_object": 1,
 }
 # pénalité par équipe manquante selon la sévérité (domaine entier : *SCALE)
 EMERGENCY_PENALTY = {3: 2000, 2: 800, 1: 200}
 SCALE = 100          # mise à l'échelle pour rester en entiers
+
+
+def static_allocation() -> dict[str, dict[str, int]]:
+    """Plan d'équipes FIXE du scénario « sans gestion prédictive » : postes
+    proportionnels à la capacité des zones, décidés à l'ouverture et JAMAIS
+    réoptimisés. Ce n'est pas un homme de paille (c'est un plan raisonnable),
+    mais il ne s'adapte ni à la prévision ni aux incidents -> le contraste avec
+    le CSP dynamique isole la valeur de la gestion prédictive.
+
+    Répartition au plus fort reste (Hare) + minimum de sécurité garanti.
+    """
+    caps = C.ZONE_CAPACITY
+    tot_cap = sum(caps.values())
+    alloc = {}
+    for res, n in C.RESOURCES.items():
+        shares = {z: n * caps[z] / tot_cap for z in C.ZONES}
+        base = {z: int(shares[z]) for z in C.ZONES}
+        rem = n - sum(base.values())
+        for z in sorted(C.ZONES, key=lambda z: shares[z] - base[z], reverse=True)[:rem]:
+            base[z] += 1
+        # minimum de sécurité par zone (emprunte à la zone la mieux dotée)
+        mn = C.MIN_STAFF_PER_ZONE[res]
+        for z in C.ZONES:
+            while base[z] < mn:
+                donor = max(C.ZONES, key=lambda d: base[d])
+                if base[donor] <= mn:
+                    break
+                base[donor] -= 1
+                base[z] += 1
+        alloc[res] = base
+    return alloc
 
 
 def solve_allocation(demand: dict[str, float],

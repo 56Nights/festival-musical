@@ -9,8 +9,10 @@ DÉMO COMPLÈTE — exécute tout le système de bout en bout.
   3. Têtes du CNN ResNet18 — entraînées UNE fois puis rechargées
   4. Boucle de contrôle intégrée                 (intégration des 4 modules)
   5. Évaluation de scénarios par MAS             (Compétence 3)
-  6. Dashboard HTML                              (Compétence 5)
-  7. Narration LLM — rapport de situation        (Compétence 5)
+  6. Impact prédictif vs réactif (avec/sans)     (Compétences 3, 5)
+  7. Vue simulation spatiale du festival         (Compétences 1, 5)
+  8. Dashboard HTML                              (Compétence 5)
+  9. Narration LLM — rapport de situation        (Compétence 5)
 
 Les poids du CNN (outputs/vision_cnn.pt) sont réutilisés s'ils existent :
 supprimez le fichier pour forcer un ré-entraînement (~30 s, têtes seules).
@@ -22,19 +24,19 @@ import config as C
 t0 = time.time()
 
 print("=" * 60)
-print("1/7  Génération des données simulées")
+print("1/9  Génération des données simulées")
 print("=" * 60)
 from data.generate_data import generate
 generate()
 
 print("\n" + "=" * 60)
-print("2/7  Prévision d'affluence — TimesFM zéro-shot (aucun entraînement)")
+print("2/9  Prévision d'affluence — TimesFM zéro-shot (aucun entraînement)")
 print("=" * 60)
 from forecasting.timesfm_forecaster import ZeroShotForecaster
 print(f"backend : {ZeroShotForecaster().backend}")
 
 print("\n" + "=" * 60)
-print("3/7  CNN ResNet18 — têtes multi-tâches")
+print("3/9  CNN ResNet18 — têtes multi-tâches")
 print("=" * 60)
 if os.path.exists(C.VISION_MODEL):
     print(f"poids trouvés ({C.VISION_MODEL}) — entraînement sauté")
@@ -43,7 +45,7 @@ else:
     train_cnn()
 
 print("\n" + "=" * 60)
-print("4/7  Boucle de contrôle intégrée (TimesFM + CNN + CSP)")
+print("4/9  Boucle de contrôle intégrée (TimesFM + CNN + CSP)")
 print("=" * 60)
 from integration.pipeline import run_control_loop
 log = run_control_loop()
@@ -51,7 +53,7 @@ print(f"{sum(len(e['alerts']) for e in log)} alertes | "
       f"{sum(e['resolved'] for e in log)} ré-allocations")
 
 print("\n" + "=" * 60)
-print("5/7  Évaluation de scénarios (simulation multi-agents)")
+print("5/9  Évaluation de scénarios (simulation multi-agents)")
 print("=" * 60)
 from allocation.dynamic_csp import solve_allocation
 from simulation.mas import evaluate_scenario, generate_incidents
@@ -92,16 +94,44 @@ with open(os.path.join(C.OUT, "scenarios.json"), "w") as f:
     json.dump(scenarios, f, indent=1)
 
 print("\n" + "=" * 60)
-print("6/7  Génération du dashboard")
+print("6/9  Impact : gestion prédictive vs réactive (même journée)")
+print("=" * 60)
+from integration.pipeline import run_reactive_loop
+from simulation.kpis import compare, ablation
+run_reactive_loop()                       # baseline « sans » (aucun modèle)
+cmp = compare()                           # avec vs sans -> kpi_comparison.json
+abl = ablation()                          # 2x2 prévision × vision -> kpi_ablation.json
+_a, _s = cmp["avec"], cmp["sans"]
+print(f"  détection  avec/sans : {_a['mean_detect_min']['mean']} / "
+      f"{_s['mean_detect_min']['mean']} min")
+print(f"  réponse    avec/sans : {_a['mean_response_min']['mean']} / "
+      f"{_s['mean_response_min']['mean']} min "
+      f"({_a['pct_within_target']:.0f}% vs {_s['pct_within_target']:.0f}% < "
+      f"{C.RESPONSE_TARGET_MIN:.0f} min)")
+print(f"  CA FoodCourt sauvé   : ~{_s['lost_revenue_eur'] - _a['lost_revenue_eur']} € "
+      f"({_s['lost_customers']} clients retenus)")
+
+print("\n" + "=" * 60)
+print("7/9  Vue simulation spatiale (jumeau numérique animé)")
+print("=" * 60)
+from simulation.replay_sim import build_replay
+build_replay()                            # intègre le bloc comparaison au header
+from dashboard.festival_map import build_map
+build_map()
+
+print("\n" + "=" * 60)
+print("8/9  Génération du dashboard")
 print("=" * 60)
 from dashboard.build_dashboard import build
 build(scenarios)
 
 print("\n" + "=" * 60)
-print("7/7  Narration LLM — rapport de situation")
+print("9/9  Narration LLM — rapport de situation")
 print("=" * 60)
 from narration.llm_narrator import summarize
-report = summarize(log, scenarios)
+report = summarize(log, scenarios, cmp)
 print("\n" + report)
 
 print(f"\nTerminé en {time.time()-t0:.0f}s. Sorties dans {C.OUT}/")
+print(f"  • Dashboard système : {C.DASHBOARD_HTML}")
+print(f"  • Vue simulation    : {C.FESTIVAL_MAP_HTML}")

@@ -1,0 +1,1281 @@
+<!DOCTYPE html>
+<html lang="fr" data-theme="auto">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Festival Musical — Vue simulation en direct</title>
+<style>
+  :root{
+    --bg:#f4f3f0; --surface:#fcfcfb; --surface-2:#eceae5; --line:#dcdad3;
+    --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#87857e;
+    --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --critical:#d03b3b;
+    --med:#d03b3b; --sec:#2a78d6; --log:#eda100;
+    --accent:#2a78d6;
+  }
+  :root[data-theme="dark"]{
+    --bg:#141413; --surface:#1a1a19; --surface-2:#232320; --line:#33332e;
+    --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8b897f;
+    --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --critical:#e05555;
+    --med:#e05555; --sec:#3987e5; --log:#c98500;
+    --accent:#3987e5;
+  }
+  @media (prefers-color-scheme:dark){
+    :root[data-theme="auto"]{
+      --bg:#141413; --surface:#1a1a19; --surface-2:#232320; --line:#33332e;
+      --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8b897f;
+      --med:#e05555; --sec:#3987e5; --log:#c98500; --accent:#3987e5;
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{
+    background:var(--bg); color:var(--ink);
+    font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    display:flex; flex-direction:column; height:100vh; overflow:hidden;
+  }
+  header{
+    display:flex; align-items:center; gap:16px; padding:10px 16px;
+    border-bottom:1px solid var(--line); background:var(--surface); flex:none;
+  }
+  header h1{font-size:15px; font-weight:650; margin:0; letter-spacing:.2px}
+  header h1 .sub{color:var(--ink-3); font-weight:400; margin-left:8px; font-size:12px}
+  .pop{margin-left:auto; font-size:12.5px; color:var(--ink-2); font-variant-numeric:tabular-nums; text-align:right}
+  .pop #pop-n{font-weight:700; font-size:17px; color:var(--ink)}
+  .pop .io{display:block; font-size:11px; margin-top:1px}
+  .pop .in{color:var(--good)} .pop .out{color:var(--serious)}
+  .clock{
+    font-variant-numeric:tabular-nums; font-weight:700; font-size:20px;
+    margin-left:20px; letter-spacing:1px;
+  }
+  .clock .day{font-size:11px; color:var(--ink-3); font-weight:500; margin-left:6px}
+  .main{display:flex; flex:1; min-height:0}
+  .stage{position:relative; flex:1; min-width:0; background:var(--bg)}
+  canvas{display:block; width:100%; height:100%}
+  #tooltip{
+    position:absolute; pointer-events:none; z-index:5; padding:8px 10px;
+    background:var(--surface); border:1px solid var(--line); border-radius:8px;
+    box-shadow:0 6px 24px rgba(0,0,0,.18); font-size:12px; max-width:220px;
+    opacity:0; transition:opacity .08s; transform:translate(-50%,calc(-100% - 12px));
+  }
+  #tooltip b{font-size:12.5px}
+  #tooltip .row{display:flex; justify-content:space-between; gap:14px; color:var(--ink-2)}
+  #tooltip .row span:last-child{color:var(--ink); font-variant-numeric:tabular-nums}
+  .legend{
+    position:absolute; left:12px; bottom:12px; z-index:4;
+    background:color-mix(in srgb,var(--surface) 88%,transparent);
+    border:1px solid var(--line); border-radius:8px; padding:8px 10px;
+    font-size:11px; color:var(--ink-2); backdrop-filter:blur(4px);
+  }
+  .legend .grp{display:flex; gap:9px; flex-wrap:wrap; align-items:center; margin-bottom:5px}
+  .legend .grp:last-child{margin-bottom:0}
+  .legend .lbl{font-size:9.5px; text-transform:uppercase; letter-spacing:.5px;
+               color:var(--ink-3); font-weight:650; width:56px; flex:none}
+  .legend .it{display:flex; align-items:center; gap:4px; color:var(--ink-2)}
+  .legend .it svg{display:block; flex:none}
+  .sw{width:10px; height:10px; border-radius:3px; flex:none}
+  .dot-sw{width:9px; height:9px; border-radius:50%}
+  /* side panel */
+  aside{
+    width:330px; flex:none; border-left:1px solid var(--line); background:var(--surface);
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .kpis{display:grid; grid-template-columns:repeat(4,1fr); gap:1px;
+        background:var(--line); border-bottom:1px solid var(--line)}
+  .kpi{background:var(--surface); padding:10px 8px; text-align:center}
+  .kpi .n{font-size:22px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1}
+  .kpi .l{font-size:10px; color:var(--ink-3); margin-top:3px; text-transform:uppercase; letter-spacing:.4px}
+  .kpi.open .n{color:var(--warn)} .kpi.res .n{color:var(--good)}
+  .kpi.unc .n{color:var(--critical)} .kpi.rt .n{color:var(--accent)}
+  .panel{overflow-y:auto; padding:12px 14px}
+  .panel h2{font-size:11px; text-transform:uppercase; letter-spacing:.6px;
+            color:var(--ink-3); margin:2px 0 8px; font-weight:650}
+  .panel section{margin-bottom:16px}
+  table.alloc{width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums}
+  table.alloc th,table.alloc td{padding:3px 4px; text-align:center; font-size:12px}
+  table.alloc th{color:var(--ink-3); font-weight:600; font-size:10.5px}
+  table.alloc td:first-child,table.alloc th:first-child{text-align:left; color:var(--ink-2)}
+  table.alloc td.z{color:var(--ink)}
+  table.alloc .chg{background:color-mix(in srgb,var(--accent) 22%,transparent); border-radius:4px}
+  .fbar{margin:5px 0}
+  .fbar .lab{display:flex; justify-content:space-between; font-size:11px; color:var(--ink-2)}
+  .fbar .track{position:relative; height:7px; background:var(--surface-2);
+               border-radius:4px; margin-top:2px; overflow:hidden}
+  .fbar .fill{position:absolute; inset:0 auto 0 0; border-radius:4px}
+  .fbar .thr{position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--critical)}
+  .feed{display:flex; flex-direction:column; gap:6px}
+  .feed .ev{display:flex; gap:8px; font-size:12px; padding:5px 7px; border-radius:7px;
+            background:var(--surface-2); border-left:3px solid var(--ink-3)}
+  .feed .ev.now{outline:1px solid var(--accent)}
+  .feed .ev.event{border-left-color:var(--critical)}
+  .feed .ev.forecast{border-left-color:var(--warn)}
+  .feed .ev.periodic{border-left-color:var(--accent)}
+  .feed .ev .t{color:var(--ink-3); font-variant-numeric:tabular-nums; flex:none}
+  .feed .ev .m{color:var(--ink-2)}
+  .feed .ev .m b{color:var(--ink)}
+  /* controls */
+  .controls{display:flex; align-items:center; gap:10px; padding:9px 16px;
+            border-top:1px solid var(--line); background:var(--surface); flex:none}
+  button.ctl{
+    border:1px solid var(--line); background:var(--surface-2); color:var(--ink);
+    border-radius:8px; padding:6px 11px; font-size:13px; cursor:pointer; font-weight:550;
+  }
+  button.ctl:hover{border-color:var(--accent)}
+  button.ctl.play{background:var(--accent); color:#fff; border-color:var(--accent); min-width:74px}
+  .speeds{display:flex; gap:3px}
+  .speeds button{padding:5px 9px; font-size:12px}
+  .speeds button.on{background:var(--accent); color:#fff; border-color:var(--accent)}
+  .scrub{flex:1; display:flex; flex-direction:column; gap:3px; min-width:120px}
+  .ticks{position:relative; height:9px}
+  .ticks i{position:absolute; top:0; width:2px; height:9px; border-radius:1px; transform:translateX(-50%)}
+  input[type=range]{width:100%; margin:0; accent-color:var(--accent)}
+  .toggles{display:flex; gap:12px; padding:7px 16px; border-top:1px solid var(--line);
+           background:var(--surface); flex:none; font-size:12px; color:var(--ink-2); flex-wrap:wrap}
+  .toggles label{display:flex; align-items:center; gap:5px; cursor:pointer; user-select:none}
+  .toggles input{accent-color:var(--accent)}
+  .iconbtn{border:1px solid var(--line); background:var(--surface-2); color:var(--ink);
+           border-radius:8px; width:34px; height:32px; cursor:pointer; font-size:15px}
+  .iconbtn.on{background:var(--accent); color:#fff; border-color:var(--accent)}
+  /* narrative banner (over the stage) */
+  #banner{
+    position:absolute; left:50%; top:12px; transform:translateX(-50%); z-index:6;
+    max-width:min(680px,92%); display:flex; align-items:center; gap:9px;
+    padding:8px 14px; border-radius:999px; font-size:13px; line-height:1.3;
+    background:color-mix(in srgb,var(--surface) 92%,transparent);
+    border:1px solid var(--line); box-shadow:0 6px 24px rgba(0,0,0,.16);
+    backdrop-filter:blur(6px); opacity:0; transition:opacity .35s, transform .35s;
+    pointer-events:none; text-align:left;
+  }
+  #banner.show{opacity:1}
+  #banner .ic{font-size:16px; flex:none}
+  #banner b{color:var(--ink)} #banner .cap{color:var(--ink-2)}
+  #banner.alert{border-color:var(--critical);
+    background:color-mix(in srgb,var(--critical) 14%,var(--surface))}
+  #banner.forecast{border-color:var(--warn)}
+  /* chapters strip */
+  .chapters{display:flex; gap:2px; padding:0 16px 6px; background:var(--surface); flex:none}
+  .chapters .ch{flex:1; font-size:10.5px; text-align:center; padding:4px 2px;
+    color:var(--ink-3); border-top:2px solid var(--line); cursor:pointer;
+    text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; overflow:hidden;
+    text-overflow:ellipsis; transition:color .2s,border-color .2s}
+  .chapters .ch.on{color:var(--ink); border-top-color:var(--accent); font-weight:650}
+  .chapters .ch:hover{color:var(--ink-2)}
+  /* forecast sparklines */
+  .spark{margin:7px 0}
+  .spark .lab{display:flex; justify-content:space-between; font-size:11px; color:var(--ink-2); margin-bottom:2px}
+  .spark .lab .now{font-variant-numeric:tabular-nums}
+  .spark .lab .fc{color:var(--warn); font-variant-numeric:tabular-nums}
+  .spark svg{display:block; width:100%; height:34px}
+  .lead{font-size:11px; color:var(--ink-2); margin:2px 0 10px; padding:5px 8px;
+    background:color-mix(in srgb,var(--warn) 12%,transparent);
+    border-left:3px solid var(--warn); border-radius:0 6px 6px 0}
+  .lead b{color:var(--ink)}
+  .kpi .n{transition:color .1s} .kpi.tick .n{animation:kpiflash .5s}
+  @keyframes kpiflash{0%{transform:scale(1.35)}100%{transform:scale(1)}}
+  .feed .ev{cursor:pointer}
+  .feed .ev:hover{background:var(--line)}
+  /* welcome overlay */
+  #welcome{position:absolute; inset:0; z-index:20; display:flex; align-items:center;
+    justify-content:center; background:color-mix(in srgb,var(--bg) 78%,transparent);
+    backdrop-filter:blur(3px)}
+  #welcome.hidden{display:none}
+  #welcome .card{max-width:460px; background:var(--surface); border:1px solid var(--line);
+    border-radius:14px; padding:22px 24px; box-shadow:0 16px 48px rgba(0,0,0,.3)}
+  #welcome h3{margin:0 0 4px; font-size:16px}
+  #welcome p{margin:0 0 14px; color:var(--ink-2); font-size:12.5px}
+  #welcome ul{margin:0 0 16px; padding:0; list-style:none; display:grid; gap:9px}
+  #welcome li{display:flex; gap:10px; align-items:flex-start; font-size:12.5px; color:var(--ink-2)}
+  #welcome li b{color:var(--ink)} #welcome li .g{font-size:16px; flex:none; width:22px; text-align:center}
+  #welcome button{border:none; background:var(--accent); color:#fff; border-radius:9px;
+    padding:9px 16px; font-size:13px; font-weight:600; cursor:pointer; width:100%}
+  body.demo aside, body.demo .toggles{display:none}
+  body.demo .clock{font-size:26px}
+  body.demo #banner{font-size:15px; top:18px}
+  /* impact strip (avec / sans) */
+  .impact{border-bottom:1px solid var(--line); background:var(--surface); padding:11px 14px 12px}
+  .impact h2{font-size:11px; text-transform:uppercase; letter-spacing:.5px;
+    color:var(--ink-3); margin:0 0 8px; font-weight:650; display:flex; justify-content:space-between}
+  .impact h2 .cols{display:flex; gap:14px}
+  .impact h2 .a{color:var(--good)} .impact h2 .s{color:var(--critical)}
+  .imp-row{display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:baseline;
+    padding:3px 0; font-size:12px}
+  .imp-row .k{color:var(--ink-2)}
+  .imp-row .v{font-variant-numeric:tabular-nums; font-weight:700; text-align:right; min-width:56px}
+  .imp-row .a{color:var(--good)} .imp-row .s{color:var(--critical)}
+  .imp-sep{font-size:9px; text-transform:uppercase; letter-spacing:.5px;
+    color:var(--ink-3); margin:7px 0 3px; padding-top:6px; border-top:1px solid var(--line)}
+  .imp-save{margin-top:9px; padding:7px 9px; border-radius:8px; font-size:12.5px;
+    background:color-mix(in srgb,var(--good) 15%,transparent); color:var(--ink);
+    border-left:3px solid var(--good); font-variant-numeric:tabular-nums}
+  .imp-save b{font-size:14px}
+  .feed .ev .m .sans{color:var(--critical); font-size:11px}
+  /* floating impact chip (demo mode) */
+  #impact-float{position:absolute; right:14px; bottom:14px; z-index:6; display:none;
+    background:color-mix(in srgb,var(--surface) 92%,transparent); border:1px solid var(--line);
+    border-radius:12px; padding:11px 14px; box-shadow:0 8px 28px rgba(0,0,0,.2);
+    backdrop-filter:blur(6px); font-variant-numeric:tabular-nums; min-width:210px}
+  body.demo #impact-float{display:block}
+  #impact-float .t{font-size:10px; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-3); margin-bottom:6px}
+  #impact-float .big{font-size:20px; font-weight:800; color:var(--good)}
+  #impact-float .big .u{font-size:12px; font-weight:600; color:var(--ink-2)}
+  #impact-float .sub{font-size:11.5px; color:var(--ink-2); margin-top:4px}
+  #impact-float .sub b{color:var(--ink)}
+</style>
+</head>
+<body>
+<header>
+  <h1>🎶 Festival Musical <span class="sub">vue simulation — jumeau numérique de la boucle de contrôle</span></h1>
+  <div class="pop">👥 <span id="pop-n">0</span> sur site
+    <span class="io"><span class="in" id="pop-in">▲0</span> <span class="out" id="pop-out">▼0</span> /min</span>
+  </div>
+  <div class="clock"><span id="clock">--:--</span><span class="day" id="daylab"></span></div>
+  <button class="iconbtn" id="demo" title="Mode démo / projecteur (masque le panneau)">▣</button>
+  <button class="iconbtn" id="theme" title="Thème clair / sombre">◐</button>
+</header>
+
+<div class="main">
+  <div class="stage">
+    <canvas id="cv"></canvas>
+    <div id="banner"></div>
+    <div id="impact-float"></div>
+    <div id="tooltip"></div>
+    <div class="legend" id="legend"></div>
+    <div id="welcome" class="hidden"><div class="card">
+      <h3>🎶 Vue simulation — comment la lire</h3>
+      <p>Jumeau numérique animé de la journée (10h → minuit). Ce que vous voyez
+         <b>est</b> ce que la boucle de contrôle a décidé.</p>
+      <ul>
+        <li><span class="g">•••</span><span><b>Les points</b> = la foule (1 point ≙ K personnes). Ils se <b>tassent</b> quand une zone se remplit.</span></li>
+        <li><span class="g">✚▲■</span><span><b>Les formes</b> = les équipes (médical, sécurité, logistique) qui se déplacent à chaque décision du CSP.</span></li>
+        <li><span class="g">◉</span><span><b>Les pastilles pulsées</b> = les incidents ; un <b>faisceau</b> relie l'équipe dépêchée à l'incident.</span></li>
+        <li><span class="g">〜</span><span><b>Trait orange pointillé</b> = la prévision TimesFM (T+2h) : elle monte <b>avant</b> le réel.</span></li>
+      </ul>
+      <button id="welcome-ok">J'ai compris ▶</button>
+    </div></div>
+  </div>
+  <aside>
+    <div class="impact" id="impact" style="display:none">
+      <h2><span>Impact — gestion prédictive</span>
+        <span class="cols"><span class="a">avec</span><span class="s">sans</span></span></h2>
+      <div id="impact-rows"></div>
+      <div class="imp-save" id="impact-save"></div>
+    </div>
+    <div class="kpis">
+      <div class="kpi open"><div class="n" id="k-open">0</div><div class="l">ouverts</div></div>
+      <div class="kpi res"><div class="n" id="k-res">0</div><div class="l">résolus</div></div>
+      <div class="kpi unc"><div class="n" id="k-unc">0</div><div class="l">non couv.</div></div>
+      <div class="kpi rt"><div class="n" id="k-rt">0</div><div class="l">rép. moy.</div></div>
+    </div>
+    <div class="panel">
+      <section>
+        <h2>Allocation des équipes (CSP)</h2>
+        <table class="alloc" id="alloc"></table>
+      </section>
+      <section>
+        <h2>Prévision TimesFM vs réel (densité)</h2>
+        <div class="lead" id="lead"></div>
+        <div id="fbars"></div>
+      </section>
+      <section>
+        <h2>Journal des événements</h2>
+        <div class="feed" id="feed"></div>
+      </section>
+    </div>
+  </aside>
+</div>
+
+<div class="chapters" id="chapters"></div>
+<div class="controls">
+  <button class="ctl play" id="play">▶ Lire</button>
+  <div class="speeds" id="speeds"></div>
+  <div class="scrub">
+    <div class="ticks" id="ticks"></div>
+    <input type="range" id="range" min="0" value="0" step="1">
+  </div>
+</div>
+<div class="toggles" id="toggles"></div>
+
+<script id="replay-data" type="application/json">__REPLAY_DATA__</script>
+<script>
+"use strict";
+const DATA = JSON.parse(document.getElementById('replay-data').textContent);
+const H = DATA.header, F = DATA.frames;
+const NF = F.length, FPS_STEP = H.frames_per_step;
+const ZONES = H.zones_order;
+const RES = H.res_types;                      // ["medical","security","logistics"]
+const THR = H.density_threshold;
+const INC_TYPES = H.inc_types || ["fallen_person","crowd_surge","suspicious_object"];
+const SCHEDULE = H.schedule || [];            // [zone, start_min, end_min, pop]
+const CHAPTERS = H.chapters || [];            // [[minute,label], ...]  (1 frame = 1 min)
+const HORIZON_STEPS = 8;                       // prévision à +2h (8 pas de 15 min)
+const STEP_MIN = H.step_minutes || 15;
+const CMP = H.comparison || null;              // impact avec/sans (peut être null)
+const PERINC = {};                             // (step|zone|type) -> horodatages jumeaux
+if(CMP) for(const p of CMP.per_incident) PERINC[p.step+'|'+p.zone+'|'+p.type]=p;
+const NSTEP = H.steps.length;
+const stepFrame = si => si*FPS_STEP;
+
+// clock helper (minute-of-day -> HH:MM), 1 frame = 1 minute, jour débute à 10h
+function fclock(m){ const h=10+Math.floor(m/60), mm=m%60;
+  return String(h).padStart(2,'0')+':'+String(mm).padStart(2,'0'); }
+
+// ---- anticipation : premier franchissement du seuil prévu vs réel ----------
+// forecast_peak[si] = pic prévu sur les 2h À VENIR ; dens[si] = densité réelle.
+const CROSS = {};   // zone -> {warnSi, realSi, leadMin}
+for(const z of ZONES){
+  let warnSi=-1, realSi=-1;
+  for(let si=0; si<NSTEP; si++){
+    const fc=(H.steps[si].forecast_peak||{})[z]||0;
+    const dr=(H.steps[si].dens||{})[z]||0;
+    if(warnSi<0 && fc>=THR) warnSi=si;
+    if(realSi<0 && dr>=THR) realSi=si;
+  }
+  const leadMin = (warnSi>=0 && realSi>=0 && warnSi<realSi)
+    ? (realSi-warnSi)*STEP_MIN : 0;
+  CROSS[z] = {warnSi, realSi, leadMin};
+}
+const LEADS = ZONES.map(z=>CROSS[z].leadMin).filter(v=>v>0);
+const AVG_LEAD = LEADS.length ? Math.round(LEADS.reduce((a,b)=>a+b,0)/LEADS.length) : 0;
+
+// ---- bandeau narratif : événements datés (frame -> légende) ----------------
+const CH_ICON = {"Ouverture":"🌅","Ruée 16–18h":"🚶","Pré-headliner + file":"⏳",
+  "Tête d'affiche":"🎤","Egress":"🌙"};
+function zLabel(t){return {fallen_person:'chute',crowd_surge:'mouvement de foule',
+  suspicious_object:'objet suspect',fight:'bagarre'}[t]||t;}
+const NARRATION = [];
+CHAPTERS.forEach(([m,lab])=>NARRATION.push(
+  {f:m, ic:CH_ICON[lab]||'•', cls:'', ttl:220, html:`<b>${lab}</b>`}));
+for(const z of ZONES){
+  const c=CROSS[z];
+  if(c.warnSi>=0 && c.leadMin>0)
+    NARRATION.push({f:stepFrame(c.warnSi), ic:'📈', cls:'forecast', ttl:200,
+      html:`TimesFM prévoit la saturation de <b>${z}</b> vers ${fclock((c.realSi)*STEP_MIN)} — <b>${Math.round(c.leadMin/60*10)/10} h d'avance</b>`});
+}
+H.steps.forEach((s,si)=>{
+  if(s.resolved && s.trigger==='event' && (s.alerts||[]).length){
+    const al=s.alerts[0];
+    NARRATION.push({f:stepFrame(si), ic:'🚨', cls:'alert', ttl:150,
+      html:`<b>${al.zone}</b> — ${al.types.map(zLabel).join(', ')} : le CSP redéploie les équipes`});
+  }
+});
+NARRATION.sort((a,b)=>a.f-b.f);
+
+// ---- métadonnées d'incident : frame d'apparition + zone (pour flash/onde) ---
+function _inPoly(x,y,poly){ let ins=false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const xi=poly[i][0],yi=poly[i][1],xj=poly[j][0],yj=poly[j][1];
+    if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi+1e-9)+xi)) ins=!ins;
+  } return ins; }
+function zoneAtPt(x,y){ for(const z of ZONES){ if(_inPoly(x,y,H.zones[z].poly)) return z; } return null; }
+const INC_SPAWN={};
+F.forEach(fr=>{ for(const it of fr.inc){ if(!(it[0] in INC_SPAWN))
+  INC_SPAWN[it[0]]={f:fr.t, zone:zoneAtPt(it[1],it[2])}; } });
+
+// ---------- theme ----------
+const root = document.documentElement;
+function isDark(){
+  const t = root.getAttribute('data-theme');
+  if(t==='dark') return true; if(t==='light') return false;
+  return matchMedia('(prefers-color-scheme:dark)').matches;
+}
+document.getElementById('theme').onclick = ()=>{
+  const cur = root.getAttribute('data-theme');
+  const next = cur==='auto' ? (isDark()?'light':'dark') : (cur==='dark'?'light':'dark');
+  root.setAttribute('data-theme', next); buildLegend(); renderStatic(); draw();
+};
+matchMedia('(prefers-color-scheme:dark)').addEventListener('change', ()=>{buildLegend();renderStatic();draw();});
+
+function zoneColor(z){ const zz=H.zones[z]; return isDark()? zz.color_dark : zz.color; }
+// mélange de deux couleurs (dégradé de teinte d'un point qui change de zone)
+const _rgb={};
+function toRGB(hex){ let c=_rgb[hex]; if(c) return c;
+  const h=hex.replace('#',''); c=[parseInt(h.slice(0,2),16),parseInt(h.slice(2,4),16),parseInt(h.slice(4,6),16)];
+  _rgb[hex]=c; return c; }
+function mixColor(a,b,t){ const A=toRGB(a),B=toRGB(b);
+  return `rgb(${Math.round(A[0]+(B[0]-A[0])*t)},${Math.round(A[1]+(B[1]-A[1])*t)},${Math.round(A[2]+(B[2]-A[2])*t)})`; }
+const RES_COLOR = {medical:'--med', security:'--sec', logistics:'--log'};
+const RES_LABEL = {medical:'médical', security:'sécurité', logistics:'logistique'};
+function cssVar(v){ return getComputedStyle(document.body).getPropertyValue(v).trim(); }
+
+// density fill: sequential calm -> critical (heat ramp)
+function densityColor(d){
+  const dk = isDark();
+  const stops = dk
+    ? [[0,[35,38,43]],[.45,[60,52,30]],[.7,[150,90,45]],[.85,[190,80,60]],[1,[224,85,85]]]
+    : [[0,[236,240,244]],[.45,[247,225,150]],[.7,[240,160,90]],[.85,[236,131,90]],[1,[208,59,59]]];
+  d = Math.max(0, Math.min(1, d));
+  for(let i=1;i<stops.length;i++){
+    if(d<=stops[i][0]){
+      const [t0,c0]=stops[i-1],[t1,c1]=stops[i];
+      const u=(d-t0)/(t1-t0||1);
+      const c=c0.map((v,k)=>Math.round(v+(c1[k]-v)*u));
+      return `rgb(${c[0]},${c[1]},${c[2]})`;
+    }
+  }
+  return 'rgb(208,59,59)';
+}
+
+// ---------- canvas / transform ----------
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+let scale=1, ox=0, oy=0, dpr=1;
+function resize(){
+  const r = cv.parentElement.getBoundingClientRect();
+  dpr = Math.min(window.devicePixelRatio||1, 2);
+  cv.width = r.width*dpr; cv.height = r.height*dpr;
+  const s = Math.min(r.width/H.map_w, r.height/H.map_h);
+  scale = s;
+  ox = (r.width - H.map_w*s)/2;
+  oy = (r.height - H.map_h*s)/2;
+  renderStatic(); draw();
+}
+function TX(x){ return (ox + x*scale)*dpr; }
+function TY(y){ return (oy + y*scale)*dpr; }
+window.addEventListener('resize', resize);
+
+// ---------- playback state ----------
+let frame=0, playing=false, speed=2, lastTs=null;
+const BASE_MIN_PER_SEC = 6;   // ×1 : 6 minutes simulées / seconde réelle
+const layers = {foule:true, equipes:true, incidents:true, prevision:true, allees:true};
+
+function lerp(a,b,t){ return a+(b-a)*t; }
+function curFrames(){
+  const i0 = Math.floor(frame), i1 = Math.min(i0+1, NF-1), a = frame-i0;
+  return [F[i0], F[i1], a];
+}
+
+// ---------- drawing ----------
+function pulse(freq){ return .5+.5*Math.sin(performance.now()/freq); }
+const SURGE_RING_LEN=16;          // frames d'onde de choc visuelle (bagarre)
+const FLASH_LEN=4;                // frames de flash de zone à l'apparition
+
+function activeConcert(m){        // concert en cours à la minute m (=frame)
+  for(const [z,s,e,p] of SCHEDULE){ if(m>=s && m<=e) return {zone:z,pop:p}; }
+  return null;
+}
+
+// ============================================================================
+// COUCHE STATIQUE DU SITE (décor) — rendue hors-écran une seule fois par
+// resize / thème / toggle « allées », puis recopiée à chaque frame. Dessine le
+// « bâti » du festival (sol, allées, scènes, stands, tentes, entrée) : rendu
+// crédible 100 % vectoriel, hors-ligne, sans aucune ressource externe.
+// ============================================================================
+const staticCv = document.createElement('canvas');
+const sctx = staticCv.getContext('2d');
+function paint(l,d){ return isDark()? d : l; }               // couleur selon thème
+const U = v => v*scale*dpr;                                  // longueur map -> px
+function zbbox(z){ const p=H.zones[z].poly; let x0=1e9,y0=1e9,x1=-1e9,y1=-1e9;
+  for(const q of p){ if(q[0]<x0)x0=q[0]; if(q[1]<y0)y0=q[1];
+                     if(q[0]>x1)x1=q[0]; if(q[1]>y1)y1=q[1]; }
+  return [x0,y0,x1,y1]; }
+function hash(i){ const x=Math.sin((i+1)*12.9898)*43758.5453; return x-Math.floor(x); }
+function rrect(g,x,y,w,h,r){ r=Math.min(r,w/2,h/2);
+  g.beginPath(); g.moveTo(x+r,y);
+  g.lineTo(x+w-r,y); g.arcTo(x+w,y,x+w,y+r,r);
+  g.lineTo(x+w,y+h-r); g.arcTo(x+w,y+h,x+w-r,y+h,r);
+  g.lineTo(x+r,y+h); g.arcTo(x,y+h,x,y+h-r,r);
+  g.lineTo(x,y+r); g.arcTo(x,y,x+r,y,r); g.closePath(); }
+function rrectMap(g,x,y,w,h,r){ rrect(g,TX(x),TY(y),U(w),U(h),U(r)); }
+
+function renderStatic(){
+  staticCv.width=cv.width; staticCv.height=cv.height;
+  const g=sctx; g.clearRect(0,0,staticCv.width,staticCv.height);
+  g.lineCap='round'; g.lineJoin='round';
+  drawGround(g);
+  if(layers.allees) drawRoads(g);
+  drawPerimeter(g);
+  drawEntranceBuilt(g);
+  drawCamping(g);
+  drawFoodStalls(g);
+  drawStageBuilt(g,'SecondStage');
+  drawStageBuilt(g,'MainStage');
+}
+
+// ---- sol : pelouse + rayures de tonte (extérieur neutre au-delà) ------------
+function drawGround(g){
+  g.fillStyle=paint('#e7e4db','#0c0c0b'); g.fillRect(0,0,staticCv.width,staticCv.height);
+  const X=TX(0),Y=TY(0),W=U(H.map_w),Hh=U(H.map_h);
+  rrect(g,X,Y,W,Hh,U(16)); g.fillStyle=paint('#c3d1a2','#212a1c'); g.fill();
+  g.save(); rrect(g,X,Y,W,Hh,U(16)); g.clip();
+  g.fillStyle=paint('rgba(255,255,255,.05)','rgba(255,255,255,.02)');
+  for(let y=0;y<H.map_h;y+=44) g.fillRect(X,TY(y),W,U(22));
+  g.restore();
+}
+
+// ---- allées : gravier (liseré large + remplissage clair) --------------------
+function strokePath(g,p){ g.beginPath(); g.moveTo(TX(p[0][0]),TY(p[0][1]));
+  for(let i=1;i<p.length;i++) g.lineTo(TX(p[i][0]),TY(p[i][1])); g.stroke(); }
+function drawRoads(g){
+  g.strokeStyle=paint('#b3a279','#221e17'); g.lineWidth=U(18);
+  for(const p of H.paths) strokePath(g,p);
+  g.strokeStyle=paint('#ddd0ad','#3a352b'); g.lineWidth=U(12.5);
+  for(const p of H.paths) strokePath(g,p);
+}
+
+// ---- clôtures (rail + poteaux) ----------------------------------------------
+function fencePosts(g,ax,ay,bx,by,gap){
+  const dx=bx-ax,dy=by-ay,L=Math.hypot(dx,dy),n=Math.max(1,Math.round(L/gap)),s=U(2.4);
+  g.fillStyle=paint('#6f6552','#39331f');
+  for(let i=0;i<=n;i++){ const t=i/n; g.fillRect(TX(ax+dx*t)-s/2,TY(ay+dy*t)-s/2,s,s); }
+}
+function fenceLine(g,pts){
+  g.strokeStyle=paint('rgba(120,110,86,.65)','rgba(90,82,64,.7)'); g.lineWidth=U(1.4);
+  g.beginPath(); g.moveTo(TX(pts[0][0]),TY(pts[0][1]));
+  for(let i=1;i<pts.length;i++) g.lineTo(TX(pts[i][0]),TY(pts[i][1])); g.stroke();
+  for(let i=0;i<pts.length-1;i++)
+    fencePosts(g,pts[i][0],pts[i][1],pts[i+1][0],pts[i+1][1],26);
+}
+function drawPerimeter(g){                       // gap en bas au centre = entrée
+  const m=15,x0=m,y0=m,x1=H.map_w-m,y1=H.map_h-m,gL=360,gR=660;
+  fenceLine(g,[[x0,y0],[x1,y0]]);  fenceLine(g,[[x1,y0],[x1,y1]]);
+  fenceLine(g,[[x0,y0],[x0,y1]]);
+  fenceLine(g,[[x0,y1],[gL,y1]]);  fenceLine(g,[[gR,y1],[x1,y1]]);
+}
+
+// ---- scènes : plateau + écran + toit + rampe de projecteurs + enceintes -----
+function stageGeom(z){ const b=zbbox(z),big=z==='MainStage',cx=(b[0]+b[2])/2,sw=(b[2]-b[0])*0.9;
+  return {big,cx,y0:b[1],sw,sx0:cx-sw/2,sx1:cx+sw/2,front:b[1]+6,
+    pd:big?26:20,rh:big?14:11,spW:big?24:17,spH:big?40:30,
+    get pTop(){return this.front-this.pd;}, get roofTop(){return this.front-this.pd-this.rh;}}; }
+function drawStageBuilt(g,z){
+  const S=stageGeom(z);
+  g.fillStyle='rgba(0,0,0,.16)'; rrectMap(g,S.sx0-1,S.pTop+3,S.sw+2,S.pd,4); g.fill();
+  g.fillStyle=paint('#33333b','#25252b'); rrectMap(g,S.sx0,S.pTop,S.sw,S.pd,3); g.fill();
+  const scW=S.sw*0.4; g.fillStyle=paint('#26406b','#1b2c4c');
+  rrectMap(g,S.cx-scW/2,S.pTop+3,scW,S.pd-8,2); g.fill();
+  g.fillStyle=paint('#454550','#34343d'); rrectMap(g,S.sx0,S.front-3,S.sw,3,1.5); g.fill();
+  g.beginPath();
+  g.moveTo(TX(S.cx-S.sw*0.56),TY(S.pTop)); g.lineTo(TX(S.cx+S.sw*0.56),TY(S.pTop));
+  g.lineTo(TX(S.cx+S.sw*0.44),TY(S.roofTop)); g.lineTo(TX(S.cx-S.sw*0.44),TY(S.roofTop));
+  g.closePath(); g.fillStyle=paint('#26262d','#191920'); g.fill();
+  const nL=S.big?7:5; g.fillStyle=paint('#e8c766','#caa24a');
+  for(let i=0;i<nL;i++){ const t=(i+0.5)/nL, lx=S.cx-S.sw*0.48+S.sw*0.96*t;
+    g.beginPath(); g.arc(TX(lx),TY(S.roofTop+S.rh*0.55),U(1.5),0,7); g.fill(); }
+  g.fillStyle=paint('#2b2b32','#202027');
+  rrectMap(g,S.sx0-S.spW-2,S.front-S.spH,S.spW,S.spH,2); g.fill();
+  rrectMap(g,S.sx1+2,S.front-S.spH,S.spW,S.spH,2); g.fill();
+  g.fillStyle=paint('#181820','#0e0e13');
+  for(const bx of [S.sx0-S.spW/2-2,S.sx1+S.spW/2+2])
+    for(let k=0;k<2;k++){ g.beginPath();
+      g.arc(TX(bx),TY(S.front-S.spH+S.spH*(0.32+0.4*k)),U(S.big?4.5:3.4),0,7); g.fill(); }
+}
+
+// ---- FoodCourt : stands à auvent rayé (deux rangées, plaza au centre) --------
+function drawStall(g,cx,topy,accent){
+  const w=24,h=17,x=cx-w/2;
+  g.fillStyle='rgba(0,0,0,.14)'; rrectMap(g,x+1,topy+7,w,h-5,2); g.fill();
+  g.fillStyle=paint('#cbb78e','#4a3f2c'); rrectMap(g,x,topy+6,w,h-6,2); g.fill();
+  g.fillStyle=paint('#b39f76','#5a4d36'); rrectMap(g,x,topy+h-2,w,3,1); g.fill();
+  const ns=5,sw=w/ns;
+  for(let s=0;s<ns;s++){ g.fillStyle= s%2? accent : paint('#f0e6d2','#d9cdb4');
+    g.fillRect(TX(x+s*sw),TY(topy),Math.ceil(U(sw))+1,U(6)); }
+  g.fillStyle=paint('rgba(0,0,0,.18)','rgba(0,0,0,.3)');
+  g.fillRect(TX(x),TY(topy)+U(6),U(w),Math.max(1,U(0.8)));
+}
+function drawFoodStalls(g){
+  const b=zbbox('FoodCourt'),x0=b[0],y0=b[1],x1=b[2],y1=b[3];
+  const a1=paint('#d9694e','#a24e39'), a2=paint('#2a78d6','#3a6bc0');
+  [0.16,0.38,0.62,0.84].forEach((fx,i)=> drawStall(g,x0+(x1-x0)*fx,y0+10,i%2?a2:a1));
+  [0.24,0.5,0.76].forEach((fx,i)=> drawStall(g,x0+(x1-x0)*fx,y1-26,i%2?a1:a2));
+}
+
+// ---- Camping : grille de tentes (A-frame) légèrement désordonnée ------------
+function drawTent(g,cx,cy,col){
+  const w=9,h=9;
+  g.fillStyle='rgba(0,0,0,.13)'; g.beginPath();
+  g.ellipse(TX(cx),TY(cy+2),U(w),U(3),0,0,7); g.fill();
+  g.beginPath(); g.moveTo(TX(cx),TY(cy-h)); g.lineTo(TX(cx+w),TY(cy+2)); g.lineTo(TX(cx-w),TY(cy+2)); g.closePath();
+  g.fillStyle=col; g.fill();
+  g.beginPath(); g.moveTo(TX(cx),TY(cy-h)); g.lineTo(TX(cx+w),TY(cy+2)); g.lineTo(TX(cx),TY(cy+2)); g.closePath();
+  g.fillStyle='rgba(0,0,0,.16)'; g.fill();
+  g.strokeStyle=paint('rgba(0,0,0,.28)','rgba(0,0,0,.5)'); g.lineWidth=Math.max(1,U(0.9));
+  g.beginPath(); g.moveTo(TX(cx),TY(cy-h)); g.lineTo(TX(cx-w),TY(cy+2));
+  g.moveTo(TX(cx),TY(cy-h)); g.lineTo(TX(cx+w),TY(cy+2)); g.stroke();
+}
+function drawCamping(g){
+  const b=zbbox('Camping'),x0=b[0]+14,y0=b[1]+16,x1=b[2]-14,y1=b[3]-12;
+  const cl=['#5079b0','#c56f52','#5a9e6f','#cf9f49','#7a6bb0'];
+  const cd=['#35507a','#8a4d38','#3d6b4c','#8f6d31','#4c4477'];
+  const cols=isDark()?cd:cl,sp=32; let i=0;
+  for(let y=y0;y<=y1;y+=sp) for(let x=x0;x<=x1;x+=sp){
+    const jx=(hash(i*2+1)-0.5)*11, jy=(hash(i*2+7)-0.5)*8;
+    drawTent(g,x+jx,y+jy,cols[Math.floor(hash(i*3+3)*cols.length)]); i++; }
+}
+
+// ---- Entrée : corridor clôturé + portique + guichets + parvis --------------
+function drawGatePost(g,x,y){ g.fillStyle=paint('#7c6a4c','#2c2519');
+  rrectMap(g,x-3,y-16,6,20,1.5); g.fill(); }
+function drawBooth(g,cx,cy){
+  const w=20,h=16,x=cx-w/2,y=cy-h/2;
+  g.fillStyle='rgba(0,0,0,.14)'; rrectMap(g,x+1,y+2,w,h,2); g.fill();
+  g.fillStyle=paint('#b7a17c','#443a29'); rrectMap(g,x,y,w,h,2); g.fill();
+  g.fillStyle=paint('#7c6a4c','#2c2519'); rrectMap(g,x-1,y-4,w+2,5,1.5); g.fill();
+  g.fillStyle=paint('#33333b','#1c1c22'); rrectMap(g,x+3,y+5,w-6,h-7,1); g.fill();
+}
+function drawEntranceBuilt(g){
+  const P=H.zones.Entrance.poly;                 // sablier : 0,1 haut ; 5,2 col ; 4,3 bas
+  g.fillStyle=paint('#ddd0ad','#3a352b'); g.beginPath();   // parvis (bulbe extérieur)
+  g.moveTo(TX(P[5][0]),TY(P[5][1])); g.lineTo(TX(P[2][0]),TY(P[2][1]));
+  g.lineTo(TX(P[3][0]),TY(P[3][1])); g.lineTo(TX(P[4][0]),TY(P[4][1])); g.closePath(); g.fill();
+  g.fillStyle=paint('#d5cbb0','#35312a'); g.beginPath();   // corridor intérieur (col -> site)
+  g.moveTo(TX(P[0][0]),TY(P[0][1])); g.lineTo(TX(P[1][0]),TY(P[1][1]));
+  g.lineTo(TX(P[2][0]),TY(P[2][1])); g.lineTo(TX(P[5][0]),TY(P[5][1])); g.closePath(); g.fill();
+  fenceLine(g,[P[1],P[2],P[3]]); fenceLine(g,[P[0],P[5],P[4]]);   // murets latéraux
+  drawBooth(g,447,652); drawBooth(g,573,652);                     // guichets
+  drawGatePost(g,P[5][0],P[5][1]); drawGatePost(g,P[2][0],P[2][1]);   // portique
+  g.strokeStyle=paint('#6f6552','#2c2519'); g.lineWidth=U(4);
+  g.beginPath(); g.moveTo(TX(P[5][0]),TY(P[5][1]-15)); g.lineTo(TX(P[2][0]),TY(P[2][1]-15)); g.stroke();
+  g.fillStyle=paint('#2a78d6','#3987e5'); rrectMap(g,510-38,589,76,9,2); g.fill();   // banderole
+}
+
+function draw(){
+  const [f0,f1,a] = curFrames();
+  const si = Math.min(Math.floor(frame/FPS_STEP), H.steps.length-1);
+  const step = H.steps[si];
+  ctx.clearRect(0,0,cv.width,cv.height);
+  ctx.drawImage(staticCv,0,0);              // décor du site (couche statique)
+
+  // zones dont le contour flashe (incident qui vient d'apparaître)
+  const flash={};
+  for(const it of f0.inc){ const meta=INC_SPAWN[it[0]];
+    if(meta && meta.zone){ const dt=frame-meta.f;
+      if(dt>=0 && dt<FLASH_LEN) flash[meta.zone]=Math.max(flash[meta.zone]||0, 1-dt/FLASH_LEN); } }
+
+  // zones
+  const trace=z=>{ const poly=H.zones[z].poly; ctx.beginPath();
+    ctx.moveTo(TX(poly[0][0]),TY(poly[0][1]));
+    for(let i=1;i<poly.length;i++) ctx.lineTo(TX(poly[i][0]),TY(poly[i][1]));
+    ctx.closePath(); };
+  for(const z of ZONES){
+    const d = lerp(f0.dens[z], f1.dens[z], a);
+    const fp = (step.forecast_peak||{})[z]||0;    // pic prévu à T+2h
+    trace(z);
+    // teinte de densité : recouvrement TRANSLUCIDE (le décor du site reste
+    // visible à faible affluence, la chaleur monte quand la zone se remplit).
+    ctx.fillStyle = densityColor(d);
+    ctx.globalAlpha = 0.2+0.62*Math.max(0,Math.min(1,d)); ctx.fill(); ctx.globalAlpha=1;
+    // anneau de PRÉ-CHAUFFE : la bordure annonce l'état FUTUR (prévision)
+    if(layers.prevision && fp>0.35){
+      ctx.save(); ctx.clip();
+      ctx.lineWidth=13*dpr; ctx.globalAlpha=Math.min(.85,(fp-0.2))*(fp>THR?(.6+.4*pulse(360)):.7);
+      ctx.strokeStyle=densityColor(fp); trace(z); ctx.stroke(); ctx.restore();
+    }
+    // contour : alerte si densité réelle > seuil
+    const over = d>THR;
+    ctx.lineWidth = (over?3.5:1.4)*dpr;
+    ctx.strokeStyle = over ? `rgba(208,59,59,${.55+.45*pulse(280)})`
+                           : (isDark()?'rgba(255,255,255,.22)':'rgba(0,0,0,.22)');
+    trace(z); ctx.stroke();
+    // flash blanc à l'apparition d'un incident
+    if(flash[z]){ ctx.save(); ctx.lineWidth=4*dpr;
+      ctx.strokeStyle=`rgba(255,255,255,${.85*flash[z]})`; trace(z); ctx.stroke(); ctx.restore(); }
+    // libellé : maintenant -> T+2h avec flèche de tendance
+    const c = H.zones[z].center;
+    ctx.fillStyle = isDark()?'rgba(255,255,255,.92)':'rgba(0,0,0,.82)';
+    ctx.font = `${Math.max(11,13*scale)*dpr}px -apple-system,sans-serif`;
+    ctx.textAlign='center';
+    ctx.fillText(z, TX(c[0]), TY(c[1])-5*dpr);
+    ctx.font = `${Math.max(10,11.5*scale)*dpr}px -apple-system,sans-serif`;
+    ctx.fillStyle = over?'#d03b3b':(isDark()?'rgba(255,255,255,.62)':'rgba(0,0,0,.55)');
+    let lbl = Math.round(d*100)+'%';
+    if(layers.prevision && fp>0.35){
+      const arrow = fp>d+0.04?' ↗':fp<d-0.04?' ↘':' →';
+      lbl += `  ›  ${Math.round(fp*100)}%${arrow}`;
+    }
+    ctx.fillText(lbl, TX(c[0]), TY(c[1])+14*dpr);
+    // badge « en concert » — posé juste au-dessus du toit de la scène
+    const con=activeConcert(Math.round(frame));
+    if(con && con.zone===z){ const S=stageGeom(z);
+      drawConcertBadge(TX(S.cx), TY(S.roofTop)-10*dpr, con.pop); }
+  }
+
+  // ondes de choc des bagarres (avant la foule -> passe sous les points)
+  if(layers.incidents){
+    for(const it of f0.inc){
+      if(it[6]!==1) continue;                       // crowd_surge only
+      const meta=INC_SPAWN[it[0]]; if(!meta) continue;
+      const dt=frame-meta.f; if(dt<0||dt>SURGE_RING_LEN) continue;
+      const x=TX(it[1]), y=TY(it[2]);
+      for(let k=0;k<3;k++){
+        const ph=(dt/SURGE_RING_LEN)+k*0.16; if(ph>1) continue;
+        ctx.beginPath(); ctx.arc(x,y, (10+ph*120)*scale*dpr,0,7);
+        ctx.strokeStyle=`rgba(236,131,90,${.5*(1-ph)})`; ctx.lineWidth=2.5*dpr; ctx.stroke();
+      }
+    }
+  }
+
+  // visitor dots — appariement par id pour interpoler. Double encodage : la
+  // couleur de fond chauffe ET les points se tassent ; à forte densité un
+  // halo additif fait émerger des points chauds lumineux.
+  if(layers.foule){
+    const D0=f0.dots, D1=f1.dots;
+    const m1={}; for(const q of D1) m1[q[0]]=q;
+    const baseA = isDark()?.82:.66;
+    // passe 1 : disques nets (rayon un peu plus petit quand c'est dense)
+    for(const p of D0){
+      const q=m1[p[0]]||p;
+      const x=TX(lerp(p[1],q[1],a)), y=TY(lerp(p[2],q[2],a));
+      const st=p[6];
+      const dz = (st===2||st===1)? (f0.dens[ZONES[p[3]]]||0) : 0;
+      const rr = Math.max(1.4, (2.5-0.7*dz)*scale)*dpr;
+      ctx.globalAlpha = st===3?baseA*0.7 : baseA;
+      ctx.fillStyle = (p[3]===p[4]) ? zoneColor(ZONES[p[3]])
+        : mixColor(zoneColor(ZONES[p[4]]), zoneColor(ZONES[p[3]]), lerp(p[5],q[5],a)/100);
+      ctx.beginPath(); ctx.arc(x,y, rr, 0,7); ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    // passe 2 : halo additif dans les zones denses -> masse lumineuse
+    ctx.globalCompositeOperation='lighter';
+    for(const p of D0){
+      const st=p[6]; if(st!==2 && st!==1) continue;
+      const dz=f0.dens[ZONES[p[3]]]||0; if(dz<0.5) continue;
+      const q=m1[p[0]]||p;
+      const x=TX(lerp(p[1],q[1],a)), y=TY(lerp(p[2],q[2],a));
+      const gr=(6+10*dz)*scale*dpr;
+      const col=toRGB(zoneColor(ZONES[p[3]]));
+      const g=ctx.createRadialGradient(x,y,0,x,y,gr);
+      g.addColorStop(0,`rgba(${col[0]},${col[1]},${col[2]},${0.06*(dz-0.4)})`);
+      g.addColorStop(1,'rgba(0,0,0,0)');
+      ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,gr,0,7); ctx.fill();
+    }
+    ctx.globalCompositeOperation='source-over';
+  }
+
+  // compteur de FILE au sablier + indicateur de sens
+  if(H.gate){
+    const gx=TX(H.gate[0]), gy=TY(H.gate[1]);
+    const net=(f0.kpi.flow_in||0)-(f0.kpi.flow_out||0);
+    if(Math.abs(net)>=4){
+      const up=net>0, s=8*dpr, dir=up?-1:1;
+      ctx.fillStyle=up?cssVar('--good'):cssVar('--serious'); ctx.globalAlpha=.55+.35*pulse(500);
+      ctx.beginPath(); ctx.moveTo(gx,gy+dir*s); ctx.lineTo(gx-s*.7,gy-dir*s*.4);
+      ctx.lineTo(gx+s*.7,gy-dir*s*.4); ctx.closePath(); ctx.fill(); ctx.globalAlpha=1;
+    }
+    const q=step.queue||0;
+    if(q>150){
+      ctx.font=`${11*dpr}px -apple-system,sans-serif`; ctx.textAlign='center';
+      ctx.fillStyle=cssVar('--serious');
+      ctx.fillText(`file : ~${q.toLocaleString('fr')} pers.`, gx, gy+46*dpr);
+    }
+  }
+
+  // responders + faisceaux de dépêche
+  if(layers.equipes){
+    const R0=f0.resp, R1=f1.resp;
+    // position interpolée des incidents (cible des faisceaux)
+    const im0={}; for(const it of f0.inc) im0[it[0]]=it;
+    const im1={}; for(const it of f1.inc) im1[it[0]]=it;
+    const incPos=id=>{ const p=im0[id]; if(!p) return null; const q=im1[id]||p;
+      return [TX(lerp(p[1],q[1],a)), TY(lerp(p[2],q[2],a))]; };
+    for(let i=0;i<R0.length;i++){
+      const p=R0[i], q=R1[i]||p;
+      const x=TX(lerp(p[2],q[2],a)), y=TY(lerp(p[3],q[3],a));
+      const rtype=RES[p[1]], st=p[4], tgt=p[5];
+      const col = cssVar(RES_COLOR[rtype]);
+      // faisceau de dépêche (équipe -> incident) pendant l'intervention
+      if((st===2||st===3||st===4) && tgt!==-1){
+        const ip=incPos(tgt);
+        if(ip){ ctx.save(); ctx.setLineDash([6*dpr,5*dpr]);
+          ctx.lineDashOffset=-(performance.now()/40)%(11*dpr);
+          ctx.strokeStyle=col; ctx.globalAlpha=st===2?.85:.4; ctx.lineWidth=1.8*dpr;
+          ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(ip[0],ip[1]); ctx.stroke();
+          ctx.restore(); ctx.globalAlpha=1; }
+      }
+      const moving = st===1||st===2;
+      if(moving){ ctx.beginPath(); ctx.arc(x,y,9*dpr,0,7);   // gyrophare
+        ctx.fillStyle=col; ctx.globalAlpha=.20*pulse(200)+.06; ctx.fill(); ctx.globalAlpha=1; }
+      if(st===4){                                            // cordon de sécurité
+        ctx.beginPath(); ctx.arc(x,y,7*dpr,0,7);
+        ctx.strokeStyle=col; ctx.globalAlpha=.5; ctx.lineWidth=2*dpr; ctx.stroke(); ctx.globalAlpha=1;
+      }
+      drawResp(x,y,rtype,col,dpr);
+    }
+  }
+
+  // incidents (pictogrammes typés + arcs)
+  if(layers.incidents){
+    const m1={}; for(const it of f1.inc) m1[it[0]]=it;
+    const pos={};
+    for(const it of f0.inc){ const j=m1[it[0]]||it;
+      pos[it[0]]=[TX(lerp(it[1],j[1],a)), TY(lerp(it[2],j[2],a))]; }
+    // liens de CHAÎNE : un blessé induit relié à son incident déclencheur
+    for(const it of f0.inc){
+      const par=it[9]; if(par===undefined||par===-1||!pos[par]) continue;
+      const [cx,cy]=pos[it[0]], [px,py]=pos[par];
+      ctx.save(); ctx.setLineDash([2*dpr,3*dpr]);
+      ctx.strokeStyle=cssVar('--critical'); ctx.globalAlpha=.35; ctx.lineWidth=1.3*dpr;
+      ctx.beginPath(); ctx.moveTo(px,py); ctx.lineTo(cx,cy); ctx.stroke();
+      ctx.restore(); ctx.globalAlpha=1;
+    }
+    for(const it of f0.inc){
+      const [x,y]=pos[it[0]];
+      drawIncident(x,y,it,dpr);
+    }
+  }
+  updatePanels(si);
+  updateBanner();
+}
+
+function drawConcertBadge(x,y,pop){
+  ctx.save();
+  ctx.font=`${13*dpr}px -apple-system,sans-serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('♪', x-14*dpr, y);
+  const n=4, bw=3*dpr, gap=2*dpr;
+  for(let i=0;i<n;i++){
+    const h=(4+6*Math.abs(Math.sin(performance.now()/220+i*1.3)))*dpr*(0.6+pop*0.6);
+    ctx.fillStyle=cssVar('--accent');
+    ctx.fillRect(x-4*dpr+i*(bw+gap), y+6*dpr-h, bw, h);
+  }
+  ctx.restore(); ctx.textBaseline='alphabetic';
+}
+
+function drawResp(x,y,rtype,col,dpr){
+  const s=6*dpr;
+  ctx.strokeStyle = isDark()?'rgba(0,0,0,.75)':'rgba(255,255,255,.9)';
+  ctx.lineWidth=2*dpr; ctx.fillStyle=col;
+  if(rtype==='medical'){                    // croix
+    ctx.beginPath();
+    ctx.rect(x-s,y-s*.34,s*2,s*.68); ctx.rect(x-s*.34,y-s,s*.68,s*2);
+    ctx.fill(); ctx.stroke();
+  }else if(rtype==='security'){             // triangle
+    ctx.beginPath(); ctx.moveTo(x,y-s); ctx.lineTo(x+s,y+s*.85); ctx.lineTo(x-s,y+s*.85);
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+  }else{                                    // carré (logistique)
+    ctx.beginPath(); ctx.rect(x-s*.8,y-s*.8,s*1.6,s*1.6); ctx.fill(); ctx.stroke();
+  }
+}
+
+// pictogramme selon le type d'incident (silhouette / impact / losange ?)
+function drawPicto(x,y,R,type){
+  ctx.fillStyle='#fff'; ctx.strokeStyle='#fff'; ctx.lineWidth=1.6*dpr;
+  if(type===0){                             // fallen_person : silhouette au sol
+    ctx.beginPath(); ctx.arc(x-R*.42,y,R*.24,0,7); ctx.fill();          // tête
+    ctx.beginPath(); ctx.moveTo(x-R*.2,y); ctx.lineTo(x+R*.5,y); ctx.stroke(); // corps
+    ctx.beginPath(); ctx.moveTo(x+R*.1,y); ctx.lineTo(x+R*.35,y+R*.3); ctx.stroke();
+  }else if(type===1){                       // crowd_surge : étoile d'impact
+    ctx.beginPath();
+    for(let i=0;i<8;i++){ const an=i*Math.PI/4, rr=i%2?R*.28:R*.6;
+      const px=x+Math.cos(an)*rr, py=y+Math.sin(an)*rr;
+      i?ctx.lineTo(px,py):ctx.moveTo(px,py); }
+    ctx.closePath(); ctx.fill();
+  }else if(type===3){                       // fight : deux chevrons qui s'entrechoquent
+    ctx.lineWidth=2*dpr; ctx.lineCap='round';
+    ctx.beginPath(); ctx.moveTo(x-R*.55,y-R*.4); ctx.lineTo(x-R*.15,y); ctx.lineTo(x-R*.55,y+R*.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x+R*.55,y-R*.4); ctx.lineTo(x+R*.15,y); ctx.lineTo(x+R*.55,y+R*.4); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x,y,R*.13,0,7); ctx.fill();
+  }else{                                    // suspicious_object : '?'
+    ctx.font=`bold ${R*1.1}px -apple-system,sans-serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText('?',x,y+R*.05);
+    ctx.textBaseline='alphabetic';
+  }
+}
+
+function drawIncident(x,y,it,dpr){
+  const sev=it[3], st=it[4], detected=it[5], type=it[6], aux=it[8]||0;
+  const R=(7+sev*2.2)*dpr;
+  if(st===3){                               // résolu -> éclat vert + ✓
+    const meta=INC_SPAWN[it[0]];
+    ctx.beginPath(); ctx.arc(x,y,R*(1.1+.7*pulse(200)),0,7);
+    ctx.fillStyle=cssVar('--good'); ctx.globalAlpha=.14; ctx.fill(); ctx.globalAlpha=1;
+    ctx.beginPath(); ctx.arc(x,y,R*.82,0,7); ctx.fillStyle=cssVar('--good'); ctx.fill();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=2*dpr; ctx.beginPath();
+    ctx.moveTo(x-R*.35,y); ctx.lineTo(x-R*.05,y+R*.3); ctx.lineTo(x+R*.4,y-R*.3); ctx.stroke();
+    return;
+  }
+  if(st===4){                               // non couvert -> ✗ rouge persistant
+    ctx.beginPath(); ctx.arc(x,y,R*.85,0,7); ctx.fillStyle=cssVar('--critical'); ctx.fill();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=2.2*dpr;
+    ctx.beginPath(); ctx.moveTo(x-R*.35,y-R*.35); ctx.lineTo(x+R*.35,y+R*.35);
+    ctx.moveTo(x+R*.35,y-R*.35); ctx.lineTo(x-R*.35,y+R*.35); ctx.stroke();
+    return;
+  }
+  const pcol = type===0?cssVar('--critical'):type===1?cssVar('--serious')
+             :type===3?cssVar('--sec'):cssVar('--warn');
+  // pending pulse plus vif à mesure que l'abandon approche
+  const speed = st===0 ? 240-1.6*aux : 360;
+  const p = pulse(Math.max(90,speed));
+  ctx.beginPath(); ctx.arc(x,y,R*(1+.55*p),0,7);
+  ctx.fillStyle=pcol; ctx.globalAlpha=.20*(1-p)+.05; ctx.fill(); ctx.globalAlpha=1;
+  ctx.beginPath(); ctx.arc(x,y,R*.62,0,7); ctx.fillStyle=pcol; ctx.fill();
+  drawPicto(x,y,R,type);
+  // anneau de compte à rebours d'ABANDON (pending) : se vide sur 30 min
+  if(st===0){
+    const frac=1-Math.min(1,aux/100);
+    ctx.beginPath(); ctx.arc(x,y,R*1.25,-Math.PI/2,-Math.PI/2+2*Math.PI*frac);
+    ctx.strokeStyle=cssVar('--critical'); ctx.lineWidth=2.4*dpr; ctx.stroke();
+  }
+  // arc de PRISE EN CHARGE (treating) : progression du soin
+  if(st===2){
+    ctx.beginPath(); ctx.arc(x,y,R*1.3,-Math.PI/2,-Math.PI/2+2*Math.PI*(aux/100));
+    ctx.strokeStyle=cssVar('--good'); ctx.lineWidth=2.6*dpr; ctx.stroke();
+    ctx.beginPath(); ctx.arc(x,y,R*1.3,0,7);
+    ctx.strokeStyle=isDark()?'rgba(255,255,255,.12)':'rgba(0,0,0,.12)'; ctx.lineWidth=2.6*dpr; ctx.stroke();
+  }
+  if(!detected && type!==3){                // manqué par la caméra -> anneau pointillé
+    ctx.save(); ctx.setLineDash([3*dpr,3*dpr]); ctx.lineWidth=1.6*dpr;   // (la bagarre est vue par la sécurité, pas la caméra)
+    ctx.strokeStyle=isDark()?'#fff':'#333';
+    ctx.beginPath(); ctx.arc(x,y,R*1.55,0,7); ctx.stroke(); ctx.restore();
+  }
+}
+
+// ---------- bandeau narratif ----------
+let _bannerKey=null;
+function updateBanner(){
+  const el=document.getElementById('banner');
+  let cur=null;
+  for(const n of NARRATION){ if(n.f<=frame && frame-n.f<n.ttl){ cur=n; } }
+  const key = cur?cur.f+cur.html:null;
+  if(key===_bannerKey) return;
+  _bannerKey=key;
+  if(!cur){ el.className=''; return; }
+  el.className='show'+(cur.cls?' '+cur.cls:'');
+  el.innerHTML=`<span class="ic">${cur.ic}</span><span class="cap">${cur.html}</span>`;
+}
+
+// ---------- side panels ----------
+let lastSi=-1, prevAlloc=null;
+function setKpi(id,val){
+  const el=document.getElementById(id), s=String(val);
+  if(el.textContent!==s){ el.textContent=s;
+    const box=el.parentElement; box.classList.remove('tick');
+    void box.offsetWidth; box.classList.add('tick'); }
+}
+function updatePanels(si){
+  const [f0]=curFrames();
+  setKpi('k-open',f0.kpi.open); setKpi('k-res',f0.kpi.resolved);
+  setKpi('k-unc',f0.kpi.uncovered); setKpi('k-rt',f0.kpi.mean_rt+'′');
+  const step=H.steps[si];
+  document.getElementById('clock').textContent=f0.clock;
+  const ch=curChapter(frame);
+  document.getElementById('daylab').textContent=ch?ch:('pas '+step.step);
+  updateChapters();
+  const k=f0.kpi;
+  document.getElementById('pop-n').textContent=(k.onsite||0).toLocaleString('fr');
+  document.getElementById('pop-in').textContent='▲'+(k.flow_in||0);
+  document.getElementById('pop-out').textContent='▼'+(k.flow_out||0);
+  renderImpact(si);                         // compteurs jumeaux (chaque pas)
+  if(si===lastSi) return;                   // le reste ne change qu'au pas
+  lastSi=si;
+  renderAlloc(step); renderForecast(si); renderFeed(si);
+}
+function curChapter(f){ let lab=null; for(const [m,l] of CHAPTERS){ if(f>=m) lab=l; } return lab; }
+
+function renderAlloc(step){
+  const a=step.allocation; const t=document.getElementById('alloc');
+  let h='<tr><th>zone</th><th title="médical">méd</th><th title="sécurité">séc</th><th title="logistique">log</th></tr>';
+  for(const z of ZONES){
+    h+=`<tr><td class="z">${z}</td>`;
+    for(const r of RES){
+      const v=a?a[r][z]:0;
+      const chg=prevAlloc && prevAlloc[r][z]!==v ? ' chg':'';
+      h+=`<td class="${chg}">${v}</td>`;
+    }
+    h+='</tr>';
+  }
+  t.innerHTML=h; prevAlloc=a;
+}
+
+// sparkline : densité RÉELLE (trait plein) vs prévision TimesFM recalée de +2h
+// (trait orange pointillé « ce que le modèle voyait venir »). L'orange monte
+// avant le plein -> l'anticipation devient visible.
+function renderForecast(si){
+  const box=document.getElementById('fbars'); let h='';
+  const W=100, Hh=34, pad=1.5;
+  const X=t=>t/(NSTEP-1)*W;
+  const Y=v=>Hh-pad - Math.max(0,Math.min(1.05,v))*(Hh-2*pad);
+  const yThr=Y(THR).toFixed(1);
+  for(const z of ZONES){
+    let real='', fc='';
+    for(let t=0;t<NSTEP;t++){
+      const v=(H.steps[t].dens||{})[z]||0;
+      real += (t?'L':'M')+X(t).toFixed(1)+' '+Y(v).toFixed(1)+' ';
+    }
+    for(let t=0;t<NSTEP;t++){
+      const src=t-HORIZON_STEPS;                 // prévision faite 2h plus tôt
+      if(src<0) continue;
+      const v=(H.steps[src].forecast_peak||{})[z]||0;
+      fc += (fc?'L':'M')+X(t).toFixed(1)+' '+Y(v).toFixed(1)+' ';
+    }
+    const nowReal=(H.steps[si].dens||{})[z]||0;
+    const nowFc=(H.steps[si].forecast_peak||{})[z]||0;
+    const px=X(si).toFixed(1);
+    h+=`<div class="spark">
+      <div class="lab"><span>${z}</span>
+        <span><span class="now">réel ${Math.round(nowReal*100)}%</span> ·
+        <span class="fc">prév. ${Math.round(nowFc*100)}%</span></span></div>
+      <svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none">
+        <line x1="0" y1="${yThr}" x2="${W}" y2="${yThr}" stroke="var(--critical)"
+              stroke-width=".5" stroke-dasharray="2 2" opacity=".55"/>
+        <path d="${fc}" fill="none" stroke="var(--warn)" stroke-width="1.4"
+              stroke-dasharray="2.5 2" opacity=".9"/>
+        <path d="${real}" fill="none" stroke="${zoneColor(z)}" stroke-width="1.4"/>
+        <line x1="${px}" y1="0" x2="${px}" y2="${Hh}" stroke="var(--ink-3)" stroke-width=".5" opacity=".7"/>
+      </svg></div>`;
+  }
+  box.innerHTML=h;
+}
+// bandeau IMPACT « avec / sans » : compteurs jumeaux qui DIVERGENT au fil de la
+// journée (séries cumulées de l'évaluateur). Le SANS est simulé sur les mêmes
+// données -> l'écart qui se creuse EST la démonstration de l'utilité.
+function renderImpact(si){
+  if(!CMP) return;
+  const A=CMP.avec.step_series[si]||CMP.avec.step_series[CMP.avec.step_series.length-1];
+  const S=CMP.sans.step_series[si]||CMP.sans.step_series[CMP.sans.step_series.length-1];
+  const eur=v=>v.toLocaleString('fr');
+  const row=(k,a,s)=>`<div class="imp-row"><span class="k">${k}</span>`+
+    `<span class="v a">${a}</span><span class="v s">${s}</span></div>`;
+  const av=CMP.avec, sv=CMP.sans;
+  const sep=`<div class="imp-sep">bilan journée — réaction en chaîne</div>`;
+  document.getElementById('impact-rows').innerHTML =
+    row('Arrivée médic', A.n_resp?A.mean_resp+'′':'—', S.n_resp?S.mean_resp+'′':'—')+
+    row('Attente FoodCourt', A.wait+'′', S.wait+'′')+
+    row('Clients perdus', A.cum_lost, S.cum_lost)+
+    sep+
+    row('Blessés induits', av.mean_induced, sv.mean_induced)+
+    row('R (enchaînement)', av.r_eff, sv.r_eff)+
+    row('Issue victimes', Math.round(av.mean_outcome*100)+'%', Math.round(sv.mean_outcome*100)+'%');
+  const saved=S.cum_rev-A.cum_rev;
+  document.getElementById('impact-save').innerHTML =
+    `💶 CA sauvé à ${H.steps[si].clock} : <b>${eur(saved)} €</b>`+
+    (saved>0?` <span style="color:var(--ink-3)">(${eur(S.cum_lost-A.cum_lost)} clients retenus)</span>`:'');
+  // chip flottant (mode démo, panneau masqué)
+  const rt = S.n_resp? `<b>${A.mean_resp}′</b> vs <b>${S.mean_resp}′</b>` : '—';
+  document.getElementById('impact-float').innerHTML =
+    `<div class="t">Impact — avec / sans gestion prédictive</div>`+
+    `<div class="big">${eur(saved)} €<span class="u"> de ventes sauvées</span></div>`+
+    `<div class="sub">Médic ${rt} · issue victimes <b>${Math.round(av.mean_outcome*100)}%</b> vs <b>${Math.round(sv.mean_outcome*100)}%</b> · R ${av.r_eff} vs ${sv.r_eff}</div>`;
+}
+
+function renderLead(){
+  const el=document.getElementById('lead');
+  if(!AVG_LEAD){ el.style.display='none'; return; }
+  const hrs=Math.floor(AVG_LEAD/60), min=AVG_LEAD%60;
+  const zs=ZONES.filter(z=>CROSS[z].leadMin>0);
+  el.innerHTML=`📈 Le modèle anticipe les pics de <b>${hrs?hrs+' h ':''}${min?min+' min':''}</b>`+
+    ` en moyenne (${zs.length} zone${zs.length>1?'s':''} : ${zs.join(', ')}).`;
+}
+
+function buildFeed(){
+  const items=[];
+  H.steps.forEach((s,si)=>{
+    (s.alerts||[]).forEach(al=>{
+      const types=al.types.map(labelType).join(', ');
+      // horodatage jumeau : quand un agent SEUL (sans caméra) l'aurait vu
+      let twin='';
+      for(const t of al.types){ const p=PERINC[s.step+'|'+al.zone+'|'+t];
+        if(p && p.detect_sans!=null){
+          twin=` <span class="sans">· sans le système : ~${fclock(si*STEP_MIN+Math.round(p.detect_sans))}</span>`; break; } }
+      items.push({si, clock:s.clock, kind:'event',
+        html:`<b>⚠ ${al.zone}</b> — ${types} <span style="color:var(--ink-3)">(caméra, dens. ${al.density})</span>${twin}`});
+    });
+    if(s.resolved){
+      const tl={event:'urgence',forecast:'pic prévu',periodic:'périodique'}[s.trigger]||s.trigger;
+      items.push({si, clock:s.clock, kind:s.trigger||'periodic',
+        html:`Ré-allocation CSP <span style="color:var(--ink-3)">(${tl})</span>`});
+    }
+  });
+  return items;
+}
+const FEED=buildFeed();
+function renderFeed(si){
+  const box=document.getElementById('feed');
+  const vis=FEED.filter(e=>e.si<=si).slice(-40).reverse();
+  box.innerHTML=vis.map(e=>
+    `<div class="ev ${e.kind}${e.si===si?' now':''}" data-si="${e.si}" title="Aller à ${e.clock}">
+     <span class="t">${e.clock}</span><span class="m">${e.html}</span></div>`).join('');
+}
+document.getElementById('feed').addEventListener('click',ev=>{
+  const el=ev.target.closest('.ev'); if(!el) return;
+  frame=Math.min(NF-1, stepFrame(+el.dataset.si)); setPlaying(false); draw();
+});
+function labelType(t){return {fallen_person:'chute',crowd_surge:'mouvement de foule',
+  suspicious_object:'objet suspect',fight:'bagarre'}[t]||t;}
+
+// ---------- legend ----------
+// icônes SVG reproduisant EXACTEMENT les formes dessinées sur la carte
+function svgWrap(inner){
+  const st=isDark()?'rgba(0,0,0,.6)':'rgba(255,255,255,.9)';
+  return `<svg viewBox="0 0 12 12" width="12" height="12">${inner.replace(/@S/g,st)}</svg>`;
+}
+const ICON = {
+  cross:  c=>svgWrap(`<path d="M4.6 0h2.8v4.6H12v2.8H7.4V12H4.6V7.4H0V4.6H4.6z" fill="${c}" stroke="@S" stroke-width=".6"/>`),
+  tri:    c=>svgWrap(`<path d="M6 .6 11.6 11H.4z" fill="${c}" stroke="@S" stroke-width=".6"/>`),
+  square: c=>svgWrap(`<rect x="1.2" y="1.2" width="9.6" height="9.6" rx="1" fill="${c}" stroke="@S" stroke-width=".6"/>`),
+  disc:   (c,sym)=>svgWrap(`<circle cx="6" cy="6" r="5.4" fill="${c}"/>`+
+            (sym?`<text x="6" y="8.9" font-size="8" font-weight="bold" text-anchor="middle" fill="#fff">${sym}</text>`:'')),
+  fallen: c=>svgWrap(`<circle cx="6" cy="6" r="5.6" fill="${c}"/><circle cx="4" cy="6" r="1.3" fill="#fff"/><path d="M5 6H8.6" stroke="#fff" stroke-width="1"/>`),
+  burst:  c=>svgWrap(`<circle cx="6" cy="6" r="5.6" fill="${c}"/><path d="M6 1.6 7 5 10.4 6 7 7 6 10.4 5 7 1.6 6 5 5z" fill="#fff"/>`),
+  obj:    c=>svgWrap(`<circle cx="6" cy="6" r="5.6" fill="${c}"/><text x="6" y="8.9" font-size="7.5" font-weight="bold" text-anchor="middle" fill="#fff">?</text>`),
+  fight:  c=>svgWrap(`<circle cx="6" cy="6" r="5.6" fill="${c}"/><path d="M3 4 4.6 6 3 8M9 4 7.4 6 9 8" fill="none" stroke="#fff" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/>`),
+  dashline: c=>svgWrap(`<line x1="0" y1="6" x2="12" y2="6" stroke="${c}" stroke-width="1.6" stroke-dasharray="2.4 1.6"/>`),
+};
+
+function buildLegend(){
+  const el=document.getElementById('legend');
+  const it=(icon,label)=>`<span class="it">${icon} ${label}</span>`;
+  const zoneDots = ZONES.map(z=>it(ICON.disc(zoneColor(z)), z)).join('');
+  el.innerHTML =
+    `<div class="grp"><span class="lbl">Foule</span>${zoneDots}</div>`+
+    `<div class="grp"><span class="lbl">Équipes</span>`+
+      it(ICON.cross(cssVar('--med')), 'médical')+
+      it(ICON.tri(cssVar('--sec')), 'sécurité')+
+      it(ICON.square(cssVar('--log')), 'logistique')+
+    `</div>`+
+    `<div class="grp"><span class="lbl">Incidents</span>`+
+      it(ICON.fallen(cssVar('--critical')), 'chute')+
+      it(ICON.burst(cssVar('--serious')), 'mvt foule')+
+      it(ICON.fight(cssVar('--sec')), 'bagarre')+
+      it(ICON.obj(cssVar('--warn')), 'objet')+
+      it(ICON.disc(cssVar('--good'),'✓'), 'résolu')+
+    `</div>`+
+    `<div class="grp"><span class="lbl">Prévision</span>`+
+      it(ICON.dashline(cssVar('--warn')), 'pic prévu TimesFM (T+2h)')+
+    `</div>`;
+}
+
+// ---------- controls ----------
+const rangeEl=document.getElementById('range'); rangeEl.max=NF-1;
+const playBtn=document.getElementById('play');
+function setPlaying(p){ playing=p; playBtn.textContent=p?'❚❚ Pause':'▶ Lire'; if(p) lastTs=null; }
+playBtn.onclick=()=>setPlaying(!playing);
+rangeEl.addEventListener('input',()=>{ frame=+rangeEl.value; setPlaying(false); draw(); });
+function seek(f){ frame=Math.min(NF-1,Math.max(0,f)); rangeEl.value=Math.floor(frame); draw(); }
+addEventListener('keydown',e=>{
+  if(e.code==='Space'){e.preventDefault(); setPlaying(!playing); return;}
+  if(e.code==='ArrowRight'){ setPlaying(false); seek(frame+ (e.shiftKey?FPS_STEP:1)); }
+  else if(e.code==='ArrowLeft'){ setPlaying(false); seek(frame- (e.shiftKey?FPS_STEP:1)); }
+  else if(e.key>='1' && e.key<='9'){ const c=CHAPTERS[+e.key-1]; if(c){ setPlaying(false); seek(c[0]); } }
+});
+
+// ---------- chapitres ----------
+const chapsEl=document.getElementById('chapters');
+CHAPTERS.forEach(([m,lab],i)=>{
+  const d=document.createElement('div'); d.className='ch'; d.textContent=lab;
+  d.title=`${fclock(m)} — ${lab} (touche ${i+1})`;
+  d.onclick=()=>{ setPlaying(false); seek(m); };
+  chapsEl.appendChild(d);
+});
+function updateChapters(){
+  const lab=curChapter(frame);
+  [...chapsEl.children].forEach((c,i)=>
+    c.classList.toggle('on', CHAPTERS[i] && CHAPTERS[i][1]===lab));
+}
+
+const speedsEl=document.getElementById('speeds');
+[1,2,4,8].forEach(sp=>{
+  const b=document.createElement('button'); b.textContent='×'+sp;
+  if(sp===speed) b.className='on';
+  b.onclick=()=>{ speed=sp; [...speedsEl.children].forEach(c=>c.className=''); b.className='on'; };
+  speedsEl.appendChild(b);
+});
+
+// bandes de PROGRAMME (concerts) : sous-segment coloré par zone
+const ticksEl=document.getElementById('ticks');
+for(const [z,s,e,p] of SCHEDULE){
+  const b=document.createElement('div');
+  b.style.cssText=`position:absolute;top:6px;height:3px;border-radius:2px;`+
+    `left:${s/(NF-1)*100}%;width:${(e-s)/(NF-1)*100}%;`+
+    `background:${zoneColor(z)};opacity:${(0.4+0.5*p).toFixed(2)}`;
+  b.title=`${z} — ${fclock(s)}→${fclock(e)}`;
+  ticksEl.appendChild(b);
+}
+// ticks d'ANTICIPATION : prévision franchit le seuil (orange) vs réel (rouge).
+// L'écart entre les deux = l'avance du modèle, visible sans explication.
+for(const z of ZONES){ const c=CROSS[z]; if(c.leadMin<=0) continue;
+  [[c.warnSi,cssVar('--warn'),'prévision'],[c.realSi,cssVar('--critical'),'réel']].forEach(([si,col,lab])=>{
+    const i=document.createElement('i');
+    i.style.left=(si*FPS_STEP/(NF-1)*100)+'%'; i.style.background=col; i.style.height='9px';
+    i.title=`${z} — seuil (${lab}) ${fclock(si*STEP_MIN)}`;
+    ticksEl.appendChild(i); });
+}
+// marqueurs de ré-allocation CSP (plus discrets)
+H.steps.forEach((s,si)=>{
+  if(!s.resolved) return;
+  const i=document.createElement('i');
+  i.style.left=(si*FPS_STEP/(NF-1)*100)+'%'; i.style.height='5px'; i.style.opacity='.6';
+  i.style.background = s.trigger==='event'?cssVar('--critical'):s.trigger==='forecast'?cssVar('--warn'):cssVar('--accent');
+  i.title=`${s.clock} — ré-allocation (${s.trigger})`;
+  ticksEl.appendChild(i);
+});
+
+// layer toggles
+const togEl=document.getElementById('toggles');
+[['foule','Foule'],['equipes','Équipes'],['incidents','Incidents'],
+ ['prevision','Prévision (T+2h)'],['allees','Allées']].forEach(([k,lab])=>{
+  const id='tg-'+k;
+  const l=document.createElement('label');
+  l.innerHTML=`<input type="checkbox" id="${id}" ${layers[k]?'checked':''}> ${lab}`;
+  togEl.appendChild(l);
+  l.querySelector('input').onchange=e=>{ layers[k]=e.target.checked;
+    if(k==='allees') renderStatic(); draw(); };
+});
+
+// ---------- zone hover tooltip ----------
+const tip=document.getElementById('tooltip');
+function pointInPoly(x,y,poly){
+  let inside=false;
+  for(let i=0,j=poly.length-1;i<poly.length;j=i++){
+    const xi=poly[i][0],yi=poly[i][1],xj=poly[j][0],yj=poly[j][1];
+    if(((yi>y)!==(yj>y)) && (x<(xj-xi)*(y-yi)/(yj-yi+1e-9)+xi)) inside=!inside;
+  }
+  return inside;
+}
+cv.addEventListener('mousemove', e=>{
+  const r=cv.getBoundingClientRect();
+  const mx=(e.clientX-r.left-ox)/scale, my=(e.clientY-r.top-oy)/scale;
+  const si=Math.min(Math.floor(frame/FPS_STEP),H.steps.length-1);
+  const step=H.steps[si]; const [f0]=curFrames();
+  let hit=null;
+  for(const z of ZONES){ if(pointInPoly(mx,my,H.zones[z].poly)){hit=z;break;} }
+  if(!hit){ tip.style.opacity=0; return; }
+  const cap=H.zones[hit].capacity, d=f0.dens[hit], att=Math.round(d*cap);
+  const a=step.allocation;
+  tip.innerHTML=`<b style="color:${zoneColor(hit)}">${hit}</b>
+    <div class="row"><span>affluence</span><span>${att.toLocaleString('fr')} / ${cap.toLocaleString('fr')}</span></div>
+    <div class="row"><span>densité</span><span>${Math.round(d*100)}%${d>THR?' ⚠':''}</span></div>
+    <div class="row"><span>équipes</span><span>${a?`${a.medical[hit]}✚ ${a.security[hit]}▲ ${a.logistics[hit]}■`:'—'}</span></div>`;
+  tip.style.left=(e.clientX-r.left)+'px'; tip.style.top=(e.clientY-r.top)+'px'; tip.style.opacity=1;
+});
+cv.addEventListener('mouseleave',()=>tip.style.opacity=0);
+
+// ---------- main loop ----------
+function tick(ts){
+  if(playing){
+    if(lastTs!=null){
+      const dt=(ts-lastTs)/1000;
+      frame += dt*BASE_MIN_PER_SEC*speed;
+      if(frame>=NF-1){ frame=NF-1; setPlaying(false); }
+      rangeEl.value=Math.floor(frame);
+    }
+    lastTs=ts;
+  }
+  draw();
+  requestAnimationFrame(tick);
+}
+
+// ---------- mode démo / projecteur ----------
+const demoBtn=document.getElementById('demo');
+function setDemo(on){ document.body.classList.toggle('demo',on); demoBtn.classList.toggle('on',on); resize(); }
+demoBtn.onclick=()=>setDemo(!document.body.classList.contains('demo'));
+
+// ---------- overlay d'accueil ----------
+const welcome=document.getElementById('welcome');
+document.getElementById('welcome-ok').onclick=()=>welcome.classList.add('hidden');
+welcome.addEventListener('click',e=>{ if(e.target===welcome) welcome.classList.add('hidden'); });
+
+// permet de partager un instant précis : festival_map.html?f=255&theme=light&demo=1
+const _q=new URLSearchParams(location.search);
+if(_q.get('theme')==='light'||_q.get('theme')==='dark') root.setAttribute('data-theme',_q.get('theme'));
+if(_q.has('f')) frame=Math.min(NF-1,Math.max(0,+_q.get('f')||0));
+if(_q.get('demo')==='1') setDemo(true);
+if(_q.get('play')==='1') setPlaying(true);
+// accueil affiché au 1er lancement (sauf lien profond / démo / déjà vu)
+let _seen=false; try{ _seen=localStorage.getItem('fmap_seen')==='1'; }catch(_){}
+if(!_seen && !_q.has('f') && _q.get('demo')!=='1'){ welcome.classList.remove('hidden'); }
+try{ localStorage.setItem('fmap_seen','1'); }catch(_){}
+rangeEl.value=Math.floor(frame);
+
+if(CMP) document.getElementById('impact').style.display='block';
+buildLegend(); renderLead(); resize(); lastSi=-1; draw();
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>

@@ -83,7 +83,41 @@ def _call_ollama(prompt: str) -> str:
         return json.load(r)["response"]
 
 
-def _template_fallback(alerts, reallocs, scenarios) -> str:
+def _impact_section(cmp) -> list:
+    """Section « apport de la gestion prédictive » (avec vs sans)."""
+    if not cmp:
+        return []
+    a, s = cmp["avec"], cmp["sans"]
+    saved = s["lost_revenue_eur"] - a["lost_revenue_eur"]
+    induced = s["mean_induced"] - a["mean_induced"]
+    outcome_gain = a["mean_outcome"] - s["mean_outcome"]
+    return [
+        "", "## 💡 Apport de la gestion prédictive (même journée, avec vs sans)",
+        f"- **Détection des incidents** : {a['mean_detect_min']['mean']} min en "
+        f"moyenne (caméra + flux optique) contre {s['mean_detect_min']['mean']} min "
+        f"pour des agents seuls.",
+        f"- **Chaîne de secours** : premiers gestes en "
+        f"{a['mean_first_aid_min']['mean']} min (staff formé sur place) puis "
+        f"médecin en {a['mean_response_min']['mean']} min — contre "
+        f"{s['mean_first_aid_min']['mean']} / {s['mean_response_min']['mean']} min "
+        f"sans le système ({a['pct_within_target']:.0f}% des cas sous la cible de "
+        f"{cmp['targets']['response_target_min']:.0f} min, contre "
+        f"{s['pct_within_target']:.0f}%).",
+        f"- **Réaction en chaîne maîtrisée** : ~{induced:.1f} blessés induits "
+        f"évités ; taux de reproduction R = {a['r_eff']} (avec) contre "
+        f"{s['r_eff']} (sans) — sous 1, les incidents s'éteignent au lieu de "
+        f"cascader. {a['mean_mce']:.2f} « mass casualty » contre {s['mean_mce']:.2f}.",
+        f"- **Issue des victimes** : score moyen {a['mean_outcome']:.0%} contre "
+        f"{s['mean_outcome']:.0%} (les premiers gestes précoces gèlent la "
+        f"dégradation), soit ~{outcome_gain*a.get('n_casualties',0):.0f} issues "
+        f"défavorables évitées.",
+        f"- **Service FoodCourt** : {a['lost_customers']} clients perdus "
+        f"contre {s['lost_customers']} — soit **~{saved} € de ventes sauvées** "
+        f"en déployant les équipes volantes AVANT le pic plutôt qu'en réaction.",
+    ]
+
+
+def _template_fallback(alerts, reallocs, scenarios, comparison=None) -> str:
     """Rapport déterministe sans LLM — garantit une démo hors ligne."""
     lines = ["# Rapport de situation — Festival (généré automatiquement)", ""]
     if alerts:
@@ -107,6 +141,7 @@ def _template_fallback(alerts, reallocs, scenarios) -> str:
                 f"{k['mean_response_min']} min, pire p95 {k['worst_p95_min']} min, "
                 f"{k['total_uncovered']} incident(s) non couvert(s) "
                 f"sur {k['total_incidents']}.")
+    lines += _impact_section(comparison)
     return "\n".join(lines)
 
 
@@ -121,33 +156,53 @@ def pick_provider():
 
 
 # ---------------------------------------------------------------- pipeline
-def summarize(control_log: list, scenarios: dict | None = None) -> str:
+def _load_comparison() -> dict | None:
+    p = os.path.join(C.OUT, "kpi_comparison.json")
+    if not os.path.exists(p):
+        return None
+    with open(p) as f:
+        cmp = json.load(f)
+    # on ne garde que les agrégats (pas les séries) pour le prompt / gabarit
+    keep = ("mean_response_min", "mean_detect_min", "mean_first_aid_min",
+            "pct_within_target", "mean_uncovered", "mean_induced", "r_eff",
+            "mean_mce", "mean_outcome", "n_casualties", "lost_customers",
+            "lost_revenue_eur")
+    return {"avec": {k: cmp["avec"][k] for k in keep},
+            "sans": {k: cmp["sans"][k] for k in keep},
+            "targets": cmp["targets"]}
+
+
+def summarize(control_log: list, scenarios: dict | None = None,
+              comparison: dict | None = None) -> str:
+    if comparison is None:
+        comparison = _load_comparison()
     # extraction des faits saillants du journal
     alerts = []
     for e in control_log:
         for a in e["alerts"]:
-        med = {}
-        if e["allocation"] and isinstance(e["allocation"].get("medical"), dict):
-            raw = e["allocation"]["medical"]
-            # garde-fou : valeurs CP-SAT parfois non initialisées hors solution
-            total_medical = C.RESOURCES["medical"]
-            med = {z: v for z, v in raw.items()
-                   if isinstance(v, int) and 0 <= v <= total_medical}
-            alerts.append({
-                "step": e["step"], "zone": a["zone"], "types": a["types"],
-                "density": a["density"],
-                "response": f"{med.get(a['zone'], '?')} équipe(s) médicale(s) "
-                            f"positionnée(s) en zone {a['zone']}",
-            })
+            med = {}
+            if e["allocation"] and isinstance(e["allocation"].get("medical"), dict):
+                raw = e["allocation"]["medical"]
+                # garde-fou : valeurs CP-SAT parfois non initialisées hors solution
+                total_medical = C.RESOURCES["medical"]
+                med = {z: v for z, v in raw.items()
+                       if isinstance(v, int) and 0 <= v <= total_medical}
+                alerts.append({
+                    "step": e["step"], "zone": a["zone"], "types": a["types"],
+                    "density": a["density"],
+                    "response": f"{med.get(a['zone'], '?')} équipe(s) médicale(s) "
+                                f"positionnée(s) en zone {a['zone']}",
+                })
     n_realloc = sum(e["resolved"] for e in control_log)
 
     provider, call = pick_provider()
     if provider == "template":
-        report = _template_fallback(alerts, n_realloc, scenarios)
+        report = _template_fallback(alerts, n_realloc, scenarios, comparison)
     else:
         facts = json.dumps({
             "alertes": alerts, "nb_reallocations": n_realloc,
-            "scenarios": scenarios}, ensure_ascii=False, indent=1)
+            "scenarios": scenarios,
+            "impact_avec_vs_sans": comparison}, ensure_ascii=False, indent=1)
         try:
             report = call(
                 "Données du système pour la période écoulée :\n" + facts +
@@ -155,7 +210,7 @@ def summarize(control_log: list, scenarios: dict | None = None) -> str:
         except Exception as exc:            # le LLM n'est jamais bloquant
             print(f"[narration] échec {provider} ({exc}) -> repli gabarit")
             provider = "template (repli)"
-            report = _template_fallback(alerts, n_realloc, scenarios)
+            report = _template_fallback(alerts, n_realloc, scenarios, comparison)
 
     path = os.path.join(C.OUT, "situation_report.md")
     with open(path, "w") as f:

@@ -7,10 +7,51 @@ intégrés dans une boucle de contrôle unique.
 ## Démarrage rapide
 
 ```bash
-pip install -r requirements.txt
-python run_demo.py          # ~2 min : données -> entraînements -> boucle -> narration -> dashboard
-open outputs/dashboard.html
+uv sync                          # installe les dépendances (torch, ortools, opencv-python-headless…)
+uv run python run_demo.py        # ~20 s : données -> boucle -> MAS -> vue simulation -> dashboard -> narration
+open outputs/festival_map.html   # ▶ vue simulation animée (plan du site, foule, équipes, incidents)
+open outputs/dashboard.html      # dashboard système (courbes, heatmap, KPIs)
 ```
+
+> Sans `uv` : `pip install -e .` (ou `pip install -r requirements.txt`) puis
+> `python run_demo.py`. La vue simulation nécessite `opencv-python-headless`
+> (flux optique) — installé automatiquement par `uv sync`.
+
+## Tester / vérifier
+
+Le projet n'a pas de framework de tests : **chaque module embarque son propre
+contrôle exécutable** (`python -m` ou exécution directe). Le test d'intégration
+de référence reste `run_demo.py` (bout en bout, doit se terminer sans erreur).
+
+```bash
+# --- test d'intégration bout en bout (le plus important) ---
+uv run python run_demo.py                 # doit afficher les 8 étapes puis « Terminé »
+
+# --- auto-vérifications par module (rapides, ciblées) ---
+uv run python simulation/replay_sim.py    # vue simulation : assertions (600 points conservés,
+                                          #   incidents tous clôturés, 24 équipes) + génère replay.json
+uv run python simulation/geometry.py      # plan du site : calibration géométrie ↔ matrice TRAVEL
+uv run python simulation/mas.py           # MAS : compare allocation CSP vs uniforme (Monte-Carlo)
+uv run python allocation/dynamic_csp.py   # CSP : situation calme + stress-test masse d'urgences
+uv run python vision/optical_flow.py      # flux optique : calme vs bousculade + fusion 3 signaux
+uv run python data/generate_data.py       # données : régénère et résume attendance.csv / events.csv
+
+# --- ne régénérer QUE la vue simulation (sans relancer toute la boucle) ---
+uv run python dashboard/festival_map.py   # relit replay.json -> outputs/festival_map.html
+```
+
+Ce que confirme chaque contrôle de la **vue simulation** :
+
+| Contrôle | Ce qu'il vérifie |
+|---|---|
+| `replay_sim.py` (auto-vérif) | conservation de la foule (600 points sur 360 images), tout incident réel finit *résolu* ou *non couvert*, effectif = 24 unités (médical 4 · sécurité 12 · logistique 8) |
+| `geometry.py` | les longueurs de chemin restent cohérentes avec la matrice `TRAVEL` du MAS (autoritative) — la vue ne peut pas contredire les KPIs |
+| `run_demo.py` | la boucle écrit `control_log.json` **avec** `truth_incidents`, puis `replay.json` et `festival_map.html` se génèrent sans erreur |
+
+Inspection manuelle de la vue (aucun serveur requis) : ouvrir
+`outputs/festival_map.html` dans un navigateur, cliquer **▶ Lire**. Pour cadrer
+un instant précis (utile en soutenance) :
+`outputs/festival_map.html?f=255&theme=light&play=1` (pic tête d'affiche).
 
 ## Architecture
 
@@ -51,6 +92,12 @@ open outputs/dashboard.html
                      ▼
               ┌──────────────────────────────┐
               │  DASHBOARD (Plotly HTML)     │
+              └──────┬───────────────────────┘
+                     ▼
+              ┌──────────────────────────────┐
+              │  VUE SIMULATION (Canvas HTML)│   jumeau numérique animé :
+              │  plan du site · foule · équipes│  rejoue spatialement la boucle
+              │  · incidents · scrub temporel │  (attendance + events + log)
               └──────────────────────────────┘
 ```
 
@@ -80,14 +127,82 @@ python narration/llm_narrator.py # sortie : outputs/situation_report.md
 
 | Dossier | Contenu | Problématique du sujet |
 |---|---|---|
-| `data/` | Génération des données simulées (affluence, incidents) | Environnement simulé |
+| `data/` | Modèle de population jour complet (arrivées, file, egress, campeurs) → `attendance.csv` · `flow.csv` · `events.csv` | Environnement simulé |
 | `forecasting/` | TimesFM zéro-shot (repli saisonnier-naïf) | 📈 Prévision de l'affluence |
 | `vision/` | ResNet18 pré-entraîné gelé + 3 têtes | ⚠️ Détection de situations anormales |
 | `allocation/` | CSP dynamique OR-Tools CP-SAT | 🔧 Allocation des ressources |
 | `simulation/` | Simulation multi-agents SimPy + Monte-Carlo | 🧪 Évaluation de scénarios |
 | `integration/` | Boucle de contrôle reliant les 4 modules | Cohérence du système |
 | `narration/` | Rapport de situation en langage naturel (LLM) | Sortie actionnable pour un opérateur |
-| `dashboard/` | Dashboard HTML Plotly | Démo soutenance |
+| `dashboard/` | Dashboard HTML Plotly + **vue simulation Canvas** | Démo soutenance |
+
+## Modèle de population (Compétences 2 & 3)
+
+Les données d'affluence ne sont plus des courbes en cloche indépendantes par
+zone : `data/generate_data.py` simule une **journée complète** (10h → minuit,
+56 pas) avec une population **conservée** (Σ affluence des zones = population
+sur site), d'après des observations réelles de festivals (cf. sources) :
+
+| Ingrédient réel | Modélisation |
+|---|---|
+| Types de public (étude Bluetooth ~130 000 festivaliers) | 4 types : campeurs (présents jour+nuit), lève-tôt, gros pic d'après-midi, public tête-d'affiche |
+| ~50 % des visiteurs arrivent 16h-18h ; ruée pré-headliner | arrivées = **processus de Poisson non-homogène** par type (log-normale mode ~16h30 + normale ~90 min avant la tête d'affiche) |
+| File d'attente aux portes en fin d'après-midi | **goulot d'admission** (capacité/pas) → une file se forme quand le flux la dépasse |
+| Egress compressé après le concert (choix de départ individuel) | départs quasi nuls avant 20h, puis egress **borné par la capacité de sortie** (~45 min pour vider l'essentiel) |
+| « Les gens campent autour d'une scène » (faible mobilité) | choix de zone par **softmax du programme des concerts** avec forte **inertie** (seule une fraction re-décide par pas) → migrations en vagues, pas de téléportation |
+| Évitement des zones saturées | pénalité d'attractivité au-delà de 85 % de capacité → débordement réaliste |
+
+Résultat : le site **part vide**, se remplit progressivement, sature à la tête
+d'affiche, puis se vide ; **seuls les campeurs restent la nuit**. Le contrôle
+`python data/generate_data.py` imprime et vérifie ces propriétés (conservation,
+pic, file, T90 d'egress, population résiduelle).
+
+## Vue simulation (jumeau numérique animé)
+
+`outputs/festival_map.html` — un plan du site vu de dessus qui **rejoue
+spatialement** la journée complète du dernier jour (56 pas → 840 images d'une
+minute, horloge 10h → minuit) :
+
+- population **dynamique** : les points **entrent par la porte** le matin,
+  saturent à la tête d'affiche, puis **sortent par la porte** le soir (colonne
+  d'egress) — 1 point ≙ K personnes ; compteur « sur site » avec flux ▲/▼ ;
+- **Entrée en sablier** : le col (la porte) est un goulot d'étranglement — la
+  foule s'entasse visiblement dans le bulbe *extérieur* à l'ouverture / la ruée
+  pré-headliner (tout le monde entre) et dans le bulbe *intérieur* à la
+  fermeture (tout le monde sort en même temps → Entrée saturée, rouge) ;
+- zones colorées par densité (alerte pulsée au-delà du seuil), migrations en
+  vagues au fil du programme (bascule vers MainStage pour la tête d'affiche,
+  retour des campeurs au Camping la nuit) ;
+- équipes (✚ médical, ▲ sécurité, ■ logistique) qui **se déplacent
+  physiquement** à chaque ré-allocation du CSP ;
+- incidents réels répartis sur la journée (après-midi · ruée · plein headliner
+  · egress) → mobilisent une équipe (trajet → prise en charge → ✓ résolu, ou
+  ✗ non couvert après 30 min), distinction **détecté / manqué** par le CNN ;
+- lecture / pause / vitesse (×1–×8) / défilement, marqueurs de ré-allocation
+  sur la timeline, journal d'événements et compteurs de KPI synchronisés.
+
+**Choix de conception (Compétence 3).** Ce n'est **pas** un second simulateur :
+c'est un jumeau numérique piloté par les artefacts déjà produits
+(`attendance.csv`, `flow.csv`, `events.csv`, `control_log.json`). Une seule
+source de vérité → ce qui est affiché **est** ce que le système a décidé. La
+logique de réponse aux incidents et les durées de trajet reprennent fidèlement
+le MAS (`simulation/mas.py`), donc la vue ne peut pas contredire les KPIs.
+
+```bash
+python data/generate_data.py      # modèle de population + contrôles de cohérence
+python simulation/geometry.py     # calibration géométrie ↔ matrice TRAVEL
+python simulation/replay_sim.py   # auto-vérification + génère outputs/replay.json
+python dashboard/festival_map.py  # génère outputs/festival_map.html (autonome)
+```
+
+Astuce démo : `festival_map.html?f=665&theme=light&play=1` ouvre à un instant
+précis (ici le pic tête d'affiche ~21h), dans un thème donné, en lecture auto.
+Repères : `f=30` (matin, site vide), `f=610` (ruée + file), `f=785` (egress).
+
+**Sources (comportement réel) :** [étude Bluetooth ~130 000 festivaliers
+(arXiv:1306.3133)](https://arxiv.org/abs/1306.3133) ·
+[FHWA — Managing Travel for Planned Special Events](https://ops.fhwa.dot.gov/publications/fhwaop04010/handbook.pdf)
+· pratiques ingress/egress (Ticket Fairy).
 
 ## Résultats de la démo
 
@@ -132,6 +247,17 @@ Aucun modèle lourd n'est entraîné localement :
   est en revanche complet et fonctionnel de bout en bout.
 - La matrice de distances inter-zones est simplifiée ; un plan réel du site
   la remplacerait sans changer l'architecture.
+- La vue simulation échantillonne la foule (1 point ≙ K personnes, ≤ 800
+  points) et **interpole** les positions entre deux relevés de 15 min : les
+  points ne sont pas des individus suivis mais un rendu représentatif du flux
+  agrégé. Les durées de trajet des équipes suivent la matrice TRAVEL
+  (autoritative) ; la géométrie du plan ne fixe que la position affichée.
+- Le modèle de population est **agrégé par type** (comptes par pas), pas
+  micro-agent individuel : il reproduit les courbes réelles (arrivées, file,
+  egress, campeurs) sans prétendre suivre chaque festivalier. La journée
+  entière étant désormais rejouée, le CNN produit davantage d'alertes (dont
+  quelques faux positifs à basse densité) — comportement réaliste d'un
+  détecteur imparfait, que le CSP absorbe sans jamais devenir infaisable.
 
 ## Correspondance avec les 6 compétences
 
@@ -170,3 +296,7 @@ la consultation de la grille demandée par le sujet.
 ## Dépendances
 
 `torch` · `ortools` · `simpy` · `plotly` · `pandas` · `numpy` · `scikit-learn`
+· `opencv-python-headless` (flux optique)
+
+La vue simulation elle-même n'ajoute **aucune** dépendance : le lecteur HTML est
+autonome (JavaScript vanilla + Canvas, JSON en ligne, aucun CDN).
