@@ -32,11 +32,12 @@ import numpy as np
 import pandas as pd
 
 import config as C
+from simulation import geometry as G
 from simulation.mas import travel_time
 from allocation.dynamic_csp import static_allocation
 
 ABANDON_INCIDENT_MIN = 30.0        # incident non couvert après 30 min (cf. mas.py)
-TREAT_MIN = (5.0, 12.0)            # durée de prise en charge (comme le MAS)
+TREAT_MIN = C.TREAT_MIN            # durée de prise en charge sur place (sourcée, cf. config)
 
 
 # ---------------------------------------------------------------------------
@@ -125,6 +126,20 @@ def _simulate_incidents(base, alloc_by_step, dens_at, start_step,
     def dens(minute, zone):
         return dens_at.get((step_at(minute), zone), 0.0)
 
+    def eff_travel(z_from, z_to, minute):
+        """Durée de trajet EFFECTIVE : la durée géométrique de base est allongée
+        quand la zone de DESTINATION est dense — un intervenant traverse une foule
+        compacte bien plus lentement (diagramme fondamental de Weidmann, cf.
+        docs/calibration-*). Pénalité bornée à ×3 (les foules s'écartent devant les
+        secours). C'est le levier physique qui rend le pré-positionnement payant :
+        au pic, l'équipe déjà sur place (intra-zone) évite la traversée lente."""
+        base = travel_time(z_from, z_to)
+        if z_from == z_to:
+            return base
+        ppsm = dens(minute, z_to) * G.PEAK_LOCAL_PPSM.get(z_to, 1.0)
+        fac = G.crowd_speed_factor(ppsm)
+        return base * min(3.0, 1.0 / max(0.33, fac))
+
     busy = {"medical": [], "security": []}   # (zone, start, end)
 
     def avail(rt, zone, t):
@@ -132,10 +147,12 @@ def _simulate_incidents(base, alloc_by_step, dens_at, start_step,
         return cap - sum(1 for (z, s, e) in busy[rt] if z == zone and s <= t < e)
 
     def nearest(rt, zone, t):
-        """Zone-source la plus proche avec une unité `rt` libre à t (ou None)."""
-        for z in sorted(C.ZONES, key=lambda z: travel_time(z, zone)):
+        """Zone-source la plus proche (trajet EFFECTIF, congestion comprise) avec
+        une unité `rt` libre à t (ou None)."""
+        cands = sorted(C.ZONES, key=lambda z: eff_travel(z, zone, t))
+        for z in cands:
             if avail(rt, z, t) > 0:
-                return z, travel_time(z, zone)
+                return z, eff_travel(z, zone, t)
         return None, None
 
     def nearest_trained(zone, t):
@@ -212,11 +229,40 @@ def _simulate_incidents(base, alloc_by_step, dens_at, start_step,
         stats["uncovered"] += 1
 
     n_parents = sum(1 for b in base if b["type"] in ("crowd_surge", "fight"))
+
+    def _contain_delay(inc):
+        return (inc["contain_start"] - inc["spawn"]) \
+            if inc.get("contain_start") is not None else None
+
     per_inc = {inc["idx"]: {"detect_delay": inc["detect_t"] - inc["spawn"],
                             "response": inc.get("t_medic"),
+                            "contain": _contain_delay(inc),
                             "outcome": inc.get("outcome")}
                for inc in incs if inc["idx"] is not None}
-    return {"per_inc": per_inc, "n_parents": n_parents, **stats}
+
+    # timeline REPRÉSENTATIVE (base + induits) : apparition -> forces sur place ->
+    # résolution, en minutes-de-journée. Alimente les timers jumeaux et les lignes
+    # « fantômes » (incidents induits évités par le système) du panneau viewer.
+    timeline = []
+    for inc in incs:
+        ty = inc["type"]
+        if ty == "fallen_person":
+            onscene = inc.get("first_aid_at")
+            if onscene is None:
+                onscene = inc.get("medic_at")
+            resolved = inc.get("medic_at")
+        else:                                           # surge / fight / objet
+            onscene = inc.get("contain_start")
+            resolved = inc.get("contain_end")
+        timeline.append({
+            "zone": inc["zone"], "type": ty, "induced": inc["induced"],
+            "spawn": round(float(inc["spawn"]), 1),
+            "detect": round(float(inc["detect_t"]), 1) if inc.get("detect_t") is not None else None,
+            "onscene": round(float(onscene), 1) if onscene is not None else None,
+            "resolved": round(float(resolved), 1) if resolved is not None else None,
+        })
+    return {"per_inc": per_inc, "n_parents": n_parents,
+            "timeline": timeline, **stats}
 
 
 def _mk_inc(idx, step, zone, itype, spawn, cls, induced):
@@ -383,18 +429,22 @@ def _simulate_service(att_at, start_step, n_steps, service_mode):
             elif prev_wait < 1.0 and reserve > 0 and not pending:
                 reserve -= 1                                     # se retire (calme)
         cap = permanent + reserve * C.SERVICE_CAP_PER_STAFF
-        total = q + dem[idx]
+        # BALKING : le client qui arrive OBSERVE la file déjà présente et en estime
+        # l'attente W ; il repart AVANT de faire la queue avec
+        #   P(W) = 1 − exp(−(W − seuil)/échelle)   pour W > seuil   (Erlang-A).
+        # La file s'auto-régule à un équilibre où assez de clients renoncent pour
+        # que débit ≈ arrivées retenues -> une file RÉELLE se forme au pic.
+        w_est = (q / cap * C.STEP_MINUTES) if cap > 0 else C.STEP_MINUTES * 4
+        p_balk = (1.0 - np.exp(-(w_est - C.BALK_THRESHOLD_MIN) / C.BALK_SCALE_MIN)) \
+            if w_est > C.BALK_THRESHOLD_MIN else 0.0
+        balked = dem[idx] * p_balk               # renoncent à l'arrivée (vue la file)
+        total = q + (dem[idx] - balked)
         served = min(total, cap)
         q = total - served
         wait = (q / cap * C.STEP_MINUTES) if cap > 0 else C.STEP_MINUTES * 4
-        ab = 0.0
-        if wait > C.ABANDON_WAIT_MIN:
-            frac = min(0.8, (wait - C.ABANDON_WAIT_MIN) / C.ABANDON_WAIT_MIN)
-            ab = q * frac
-            q -= ab
         prev_wait = wait
-        lost_cust += ab
-        lost_rev += ab * C.MEAL_BASKET_EUR
+        lost_cust += balked
+        lost_rev += balked * C.MEAL_BASKET_EUR
         series.append({"wait": round(wait, 1), "queue": int(q),
                        "reserve": reserve, "served": int(served),
                        "cum_lost": int(round(lost_cust)),
@@ -441,12 +491,16 @@ def evaluate(log, detection_mode, n_runs=None, seed=2027, service_mode="proactiv
     t_medic_all, det_all, fa_all, contain_all, out_all = [], [], [], [], []
     induced_runs, mce_runs, unc_runs = [], [], []
     n_parents = 0
-    per_inc_acc = {i["idx"]: {"det": [], "resp": [], "out": []} for i in incidents}
+    rep_timeline = None
+    per_inc_acc = {i["idx"]: {"det": [], "resp": [], "contain": [], "out": []}
+                   for i in incidents}
     for _ in range(n_runs):
         res = _simulate_incidents(
             [dict(i) for i in incidents], alloc_by_step, dens_at, start_step,
             detection_mode, detected, rng)
         n_parents = res["n_parents"]
+        if rep_timeline is None:
+            rep_timeline = res["timeline"]           # 1er tirage = timeline représentative
         t_medic_all += res["t_medic"]
         fa_all += res["t_first_aid"]
         contain_all += res["t_contain"]
@@ -458,6 +512,8 @@ def evaluate(log, detection_mode, n_runs=None, seed=2027, service_mode="proactiv
             per_inc_acc[idx]["det"].append(v["detect_delay"])
             if v["response"] is not None:
                 per_inc_acc[idx]["resp"].append(v["response"])
+            if v["contain"] is not None:
+                per_inc_acc[idx]["contain"].append(v["contain"])
             if v["outcome"] is not None:
                 per_inc_acc[idx]["out"].append(v["outcome"])
             det_all.append(v["detect_delay"])
@@ -481,6 +537,7 @@ def evaluate(log, detection_mode, n_runs=None, seed=2027, service_mode="proactiv
             "type": i["type"],
             "detect_min": round(float(np.mean(acc["det"])), 1) if acc["det"] else None,
             "response_min": round(float(np.mean(acc["resp"])), 1) if acc["resp"] else None,
+            "contain_min": round(float(np.mean(acc["contain"])), 1) if acc["contain"] else None,
             "outcome": round(float(np.mean(acc["out"])), 2) if acc["out"] else None,
         })
     step_series = _step_series(incidents, per_inc_out, svc_series, steps)
@@ -501,6 +558,8 @@ def evaluate(log, detection_mode, n_runs=None, seed=2027, service_mode="proactiv
         "mean_induced": round(mean_induced, 2),   # blessés induits / journée
         "r_eff": round(mean_induced / n_parents, 2) if n_parents else 0.0,
         "mean_mce": round(float(np.mean(mce_runs)), 2),
+        "pct_mce_runs": round(float(np.mean([1.0 if m > 0 else 0.0 for m in mce_runs]))
+                              * 100, 0),           # % de rejeux atteignant un MCE
         "mean_uncovered": round(float(np.mean(unc_runs)), 2),
         "n_incidents": len(incidents),
         # C. service FoodCourt
@@ -512,6 +571,7 @@ def evaluate(log, detection_mode, n_runs=None, seed=2027, service_mode="proactiv
         "service_series": svc_series,
         "step_series": step_series,
         "per_incident": per_inc_out,
+        "rep_timeline": rep_timeline or [],       # timeline représentative (base+induits)
     }
 
 
@@ -555,7 +615,9 @@ def compare(n_runs=None, out_path=None):
     payload = {
         "avec": avec, "sans": sans,
         "targets": {"response_target_min": C.RESPONSE_TARGET_MIN,
+                    "first_aid_target_min": C.FIRST_AID_TARGET_MIN,
                     "abandon_wait_min": C.ABANDON_WAIT_MIN,
+                    "balk_threshold_min": C.BALK_THRESHOLD_MIN,
                     "basket_eur": C.MEAL_BASKET_EUR},
     }
     with open(out_path, "w") as f:

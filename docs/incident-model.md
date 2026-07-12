@@ -169,7 +169,8 @@ tout le projet dedans.
   *Crowd turbulence: the physics of crowd disasters* (arxiv.org/pdf/0708.3339) ;
   Wikipedia *Crowd collapses and crushes* ; The Conversation *Ten tips for
   surviving a crowd crush* (~6–7 pers/m²).
-- Astroworld : chronologie ABC13/ABC News (MCE déclaré ~30 min après le début
+- Astroworld : chronologie officielle HPD via ABC13 — 21h07 premier appel 911,
+  **21h47 déclaration MCE** (≈ 40 min, d'où `MCE_MIN = 40`), pas «~30 min après le début
   du set) ; Wikipedia *Astroworld Festival crowd crush* (asphyxie compressive).
 - Asphyxie / RCP : *CPR duration and prognosis in OHCA due to asphyxiation*
   (ScienceDirect, issue favorable <1 % après ~4 min) ; *Bystander CPR and

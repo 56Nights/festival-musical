@@ -19,22 +19,21 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import numpy as np
 import simpy
 import config as C
+from simulation import geometry as G
 
 rng = np.random.default_rng(123)
 
-TRAVEL = {
-    ("MainStage", "SecondStage"): 4, ("MainStage", "FoodCourt"): 3,
-    ("MainStage", "Camping"): 8,     ("MainStage", "Entrance"): 6,
-    ("SecondStage", "FoodCourt"): 3, ("SecondStage", "Camping"): 6,
-    ("SecondStage", "Entrance"): 5,  ("FoodCourt", "Camping"): 5,
-    ("FoodCourt", "Entrance"): 4,    ("Camping", "Entrance"): 7,
-}
+# Durées de trajet DÉRIVÉES de la géométrie du site (longueur d'allée réelle ×
+# échelle METERS_PER_U ÷ vitesse d'intervention), et non plus une matrice
+# arbitraire. La carte est désormais la SOURCE DE VÉRITÉ des durées : la vue
+# simulation et les KPIs partagent la même géométrie -> ils ne peuvent pas se
+# contredire. cf. simulation/geometry.py (travel_minutes) et docs/calibration-*.
+TRAVEL = {(a, b): G.travel_minutes(a, b)
+          for i, a in enumerate(C.ZONES) for b in C.ZONES[i + 1:]}
 
 
 def travel_time(a: str, b: str) -> float:
-    if a == b:
-        return 1.0
-    return TRAVEL.get((a, b), TRAVEL.get((b, a), 6))
+    return G.travel_minutes(a, b)
 
 
 def _incident_rate_at(t_min: float, base_rate: float,
@@ -178,8 +177,9 @@ if __name__ == "__main__":
     demand = {"MainStage": .8, "SecondStage": .5, "FoodCourt": .4,
               "Camping": .2, "Entrance": .3}
 
-    # plannings partagés — même incidents pour les deux allocations
-    shared = generate_incidents(20, demand=demand)
+    # plannings partagés — même incidents pour les deux allocations (taux modéré :
+    # hors saturation, le placement CSP se distingue nettement du naïf uniforme)
+    shared = generate_incidents(20, incident_rate=0.15, demand=demand)
 
     alloc_csp, _ = solve_allocation(demand)
     naive = {r: {z: t // C.N_ZONES + (1 if i < t % C.N_ZONES else 0)

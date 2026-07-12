@@ -23,6 +23,29 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config as C
 
 # ---------------------------------------------------------------------------
+# Diagramme fondamental piéton (Weidmann/Kladek) — vitesse en fonction de la
+# densité locale (pers/m²). v(ρ)/v_libre = 1 − exp(−γ(1/ρ − 1/ρ_max)).
+# Sert à ralentir les points de foule dans les zones denses (ruée pré-headliner).
+# Source : Weidmann 1993, via Kretz arXiv:0901.0170. cf. docs/calibration-*.md.
+# ---------------------------------------------------------------------------
+def crowd_speed_factor(ppsm):
+    """Facteur de vitesse ∈ (0,1] à la densité `ppsm` (pers/m²)."""
+    if ppsm <= 0.05:
+        return 1.0
+    if ppsm >= C.JAM_DENSITY_PPSM:
+        return 0.05
+    f = 1.0 - math.exp(-C.FD_GAMMA * (1.0 / ppsm - 1.0 / C.JAM_DENSITY_PPSM))
+    return max(0.05, min(1.0, f))
+
+# Densité LOCALE au pic (pers/m²) supposée quand une zone est à `density = 1`.
+# Nos capacités sont « confortables » (~0,5 pers/m² en moyenne de zone) ; la foule
+# se concentre au point focal (devant de scène) où la densité réelle est bien plus
+# forte — 3-4 pers/m² devant scène vs 2 à l'arrière (Standon Calling CMP). On mappe
+# donc density→ppsm local par ce facteur pour un ralentissement réaliste au pic.
+PEAK_LOCAL_PPSM = {"MainStage": 4.0, "SecondStage": 4.0,
+                   "FoodCourt": 2.5, "Camping": 1.0, "Entrance": 3.0}
+
+# ---------------------------------------------------------------------------
 # Polygones des zones (vue de dessus, repère x->droite, y->bas, unités « u »).
 # Disposition : Entrée en bas (arrivée), MainStage en haut au centre (grande),
 # SecondStage à gauche, FoodCourt au centre, Camping à droite.
@@ -72,6 +95,23 @@ def polygon_centroid(poly):
 
 
 ZONE_CENTER = {z: polygon_centroid(p) for z, p in ZONE_SHAPES.items()}
+
+
+def polygon_area(poly):
+    """Aire du polygone (formule du lacet, valeur absolue), en u²."""
+    a = 0.0
+    n = len(poly)
+    for i in range(n):
+        x0, y0 = poly[i]
+        x1, y1 = poly[(i + 1) % n]
+        a += x0 * y1 - x1 * y0
+    return abs(a) * 0.5
+
+
+# aires (u² et m²) et densité locale au pic (pers/m²) par zone — sert à la
+# calibration (contrôle p/m² vs seuils réels) et au ralentissement de la foule.
+ZONE_AREA_U2 = {z: polygon_area(p) for z, p in ZONE_SHAPES.items()}
+ZONE_AREA_M2 = {z: ZONE_AREA_U2[z] * C.METERS_PER_U ** 2 for z in ZONE_SHAPES}
 
 
 def _bbox(poly):
@@ -204,28 +244,131 @@ def zone_travel_length(a, b):
     return path_length(path_between(a, b))
 
 
-if __name__ == "__main__":
-    from simulation.mas import TRAVEL, travel_time
+# ---------------------------------------------------------------------------
+# Postes de staff par zone — points de stationnement par défaut, ordonnés du
+# PLUS optimal au MOINS optimal (le CSP alloue des COMPTES par zone ; un mapping
+# déterministe place la k-ième unité d'une zone au k-ième poste). Choix inspirés
+# de la doctrine réelle : crash-barrier gauche/droite + régie devant les scènes,
+# centre puis extrémités des rangées au FoodCourt, col + guichets à l'Entrée.
+# ---------------------------------------------------------------------------
+def _staff_posts(zone):
+    x0, y0, x1, y1 = ZONE_BBOX[zone]
+    cx, cy = (x0 + x1) / 2.0, (y0 + y1) / 2.0
+    if zone in ("MainStage", "SecondStage"):
+        fy = y0 + (y1 - y0) * 0.30                    # ligne de crash-barrier
+        return [(cx, fy),                             # centre devant scène (optimal)
+                (x0 + (x1 - x0) * 0.22, fy),          # barrière gauche
+                (x1 - (x1 - x0) * 0.22, fy),          # barrière droite
+                (cx, cy),                             # milieu de fosse
+                (cx, y1 - 10)]                        # arrière (moins optimal)
+    if zone == "FoodCourt":
+        return [(cx, cy), (x0 + 14, cy), (x1 - 14, cy), (cx, y0 + 12)]
+    if zone == "Camping":
+        return [(cx, cy), (x0 + 18, y0 + 18), (x1 - 18, y0 + 18),
+                (x0 + 18, y1 - 16), (x1 - 18, y1 - 16)]
+    return [GATE_POINT, (447, 652), (573, 652), (cx, cy)]   # Entrance : col + guichets
 
-    print("Calibration géométrie vs matrice TRAVEL du MAS")
-    print(f"WALK_SPEED = {C.WALK_SPEED} u/min\n")
-    print(f"{'paire':28s} {'long.(u)':>9s} {'TRAVEL(min)':>11s} "
-          f"{'implicite':>10s} {'écart %':>8s}")
-    ratios = []
+
+STAFF_POSTS = {z: _staff_posts(z) for z in C.ZONES}
+
+
+# ---------------------------------------------------------------------------
+# Stands de restauration (fenêtres de service) — positions ALIGNÉES sur celles
+# dessinées par le lecteur (`drawFoodStalls` : rangée avant à fx ∈ {0.16, 0.38,
+# 0.62, 0.84} du bbox FoodCourt). Les festivaliers qui font la queue s'alignent
+# en files serpentines DEVANT ces fenêtres (cf. replay_sim `_food_queue`).
+# ---------------------------------------------------------------------------
+def _food_stalls():
+    x0, y0, x1, y1 = ZONE_BBOX["FoodCourt"]
+    return [(x0 + (x1 - x0) * fx, y0 + 10.0) for fx in (0.16, 0.38, 0.62, 0.84)]
+
+
+FOOD_STALLS = _food_stalls()
+
+
+def food_queue_slots(n, row_gap=12.0, head_dy=22.0):
+    """Emplacements de file (serpentine) devant les stands : une allée par stand
+    (rangée avant), la tête de file au plus près de la fenêtre, la queue qui
+    descend vers la plaza. Retourne les `n` premiers créneaux (tête d'abord)."""
+    x0, y0, x1, y1 = ZONE_BBOX["FoodCourt"]
+    lanes = [sx for sx, _ in FOOD_STALLS]
+    y_head = FOOD_STALLS[0][1] + head_dy
+    y_max = y1 - 12.0
+    slots, row = [], 0
+    while len(slots) < n:
+        y = y_head + row * row_gap
+        if y > y_max:
+            break
+        for lx in lanes:
+            slots.append((lx, y))
+            if len(slots) >= n:
+                break
+        row += 1
+    return slots
+
+
+def _intra_zone_min(zone):
+    """Temps moyen de déplacement DANS une zone (poste optimal -> incident),
+    dérivé de la taille de zone et de la vitesse d'intervention. Même au sein
+    d'un stage, rejoindre un incident prend du temps (≥ 0,5 min)."""
+    x0, y0, x1, y1 = ZONE_BBOX[zone]
+    diag_u = math.hypot(x1 - x0, y1 - y0)
+    mean_dist_m = 0.35 * diag_u * C.METERS_PER_U       # distance moyenne poste->point
+    minutes = mean_dist_m / (C.RESPONDER_SPEED_MPS * 60.0)
+    return max(0.5, round(minutes * 2) / 2)            # arrondi à 0,5 min
+
+
+INTRA_ZONE_MIN = {z: _intra_zone_min(z) for z in C.ZONES}
+
+
+def travel_minutes(a, b):
+    """Durée de trajet d'une équipe (min), DÉRIVÉE de la géométrie : longueur
+    d'allée × échelle ÷ vitesse d'intervention. Intra-zone = INTRA_ZONE_MIN.
+    C'est désormais la source de vérité des durées (mas.TRAVEL en dépend)."""
+    if a == b:
+        return INTRA_ZONE_MIN.get(a, 1.0)
+    metres = zone_travel_length(a, b) * C.METERS_PER_U
+    minutes = metres / (C.RESPONDER_SPEED_MPS * 60.0)
+    return max(0.5, round(minutes * 2) / 2)            # arrondi à 0,5 min
+
+
+if __name__ == "__main__":
+    from simulation.mas import travel_time
+
+    # --- 1. échelle physique + densité réelle par zone (calibration Standon) ---
+    print(f"Échelle : 1 u = {C.METERS_PER_U} m  ->  site "
+          f"{C.MAP_W * C.METERS_PER_U:.0f} × {C.MAP_H * C.METERS_PER_U:.0f} m "
+          f"({C.MAP_W * C.MAP_H * C.METERS_PER_U ** 2 / 1e4:.1f} ha)")
+    print(f"Vitesses : foule {C.WALK_SPEED_MPS} m/s ({C.WALK_SPEED:.0f} u/min) · "
+          f"staff {C.RESPONDER_SPEED_MPS} m/s\n")
+    print(f"{'zone':12s} {'aire (m²)':>10s} {'capacité':>9s} "
+          f"{'p/m² moyen':>11s} {'p/m² focal':>11s}")
+    for z in C.ZONES:
+        a_m2 = ZONE_AREA_M2[z]
+        avg = C.ZONE_CAPACITY[z] / a_m2
+        print(f"{z:12s} {a_m2:10.0f} {C.ZONE_CAPACITY[z]:9d} "
+              f"{avg:11.2f} {PEAK_LOCAL_PPSM[z]:11.1f}")
+    print("  (réf. Standon Calling : arène main stage 15 357 m², 3-4 p/m² devant "
+          "scène ; seuils réels : confort 2, danger 5-6, turbulence 6-7+ p/m²)\n")
+
+    # --- 2. durées de trajet dérivées de la géométrie (source de vérité) ---
+    print("Trajets équipe (dérivés de la géométrie, arrondis 0,5 min) :")
+    print(f"{'paire':28s} {'long.(u)':>9s} {'long.(m)':>9s} {'trajet(min)':>11s}")
     zones = C.ZONES
+    durations = []
     for i in range(len(zones)):
         for j in range(i + 1, len(zones)):
             a, b = zones[i], zones[j]
             L = zone_travel_length(a, b)
             tmin = travel_time(a, b)
-            implied = L / tmin                       # u/min qu'il faudrait
-            dev = 100 * (L / C.WALK_SPEED - tmin) / tmin
-            ratios.append(implied)
-            print(f"{a+'-'+b:28s} {L:9.0f} {tmin:11.1f} "
-                  f"{implied:10.1f} {dev:+8.0f}")
-    best = sum(ratios) / len(ratios)
-    print(f"\nVitesse de meilleur ajustement ~ {best:.0f} u/min "
-          f"(config WALK_SPEED = {C.WALK_SPEED}).")
-    print("Note : les durées des équipes suivent TRAVEL (autoritatif) ; la "
-          "géométrie ne fixe que la position affichée. WALK_SPEED ne sert "
-          "qu'aux points de foule.")
+            durations.append(tmin)
+            print(f"{a+'-'+b:28s} {L:9.0f} {L*C.METERS_PER_U:9.0f} {tmin:11.1f}")
+    print(f"\nIntra-zone : "
+          + " · ".join(f"{z} {INTRA_ZONE_MIN[z]:.1f}" for z in C.ZONES) + " min")
+    # contrôle de cohérence : des durées plausibles pour un site de ~17 ha
+    assert all(0.5 <= d <= 12 for d in durations), \
+        "durées de trajet hors plage plausible [0,5 ; 12] min"
+    assert all(0.5 <= INTRA_ZONE_MIN[z] <= 6 for z in C.ZONES), \
+        "temps intra-zone hors plage plausible"
+    print("\nOK — durées dans la plage plausible ; la géométrie est la source de "
+          "vérité (mas.TRAVEL et la vue simulation en dérivent).")

@@ -219,6 +219,83 @@
   #impact-float .big .u{font-size:12px; font-weight:600; color:var(--ink-2)}
   #impact-float .sub{font-size:11.5px; color:var(--ink-2); margin-top:4px}
   #impact-float .sub b{color:var(--ink)}
+  /* live incident monitor (surveillance temps réel — remplace l'ancien bandeau impact) */
+  .monitor{border-bottom:1px solid var(--line); background:var(--surface); padding:11px 14px 12px}
+  .monitor h2{font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--ink-3);
+    margin:0 0 8px; font-weight:650; display:flex; justify-content:space-between; align-items:baseline}
+  .monitor h2 .cnt{color:var(--ink-2); font-variant-numeric:tabular-nums; font-size:11px}
+  .mon-list{display:flex; flex-direction:column; gap:5px; max-height:230px; overflow-y:auto}
+  .mon-head{display:grid; grid-template-columns:1fr 52px 52px; gap:6px; padding:0 8px 1px;
+    font-size:9px; text-transform:uppercase; letter-spacing:.4px; color:var(--ink-3)}
+  .mon-head .ca{color:var(--good); text-align:right} .mon-head .cs{color:var(--critical); text-align:right}
+  .mon-row{display:grid; grid-template-columns:16px 1fr 52px 52px; align-items:center; gap:6px;
+    padding:5px 8px; border-radius:7px; background:var(--surface-2); border-left:3px solid var(--ink-3)}
+  .mon-row svg{display:block; flex:none}
+  .mon-row .who{min-width:0; font-size:12px; color:var(--ink-2);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .mon-row .who b{color:var(--ink)}
+  .mon-row .st{font-size:10.5px; color:var(--ink-3)}
+  .mon-row .ind{font-size:8.5px; text-transform:uppercase; letter-spacing:.3px; color:var(--serious);
+    border:1px solid var(--serious); border-radius:4px; padding:0 3px; margin-left:4px}
+  .mon-row .chr{font-variant-numeric:tabular-nums; font-weight:700; font-size:13.5px; text-align:right}
+  .mon-row .chr.ca{color:var(--good)} .mon-row .chr.cs{color:var(--ink-3)}
+  .mon-row .chr.cs.bad{color:var(--critical)}
+  .mon-row.pending{border-left-color:var(--warn)}
+  .mon-row.late{border-left-color:var(--critical); animation:monpulse 1s ease-in-out infinite}
+  .mon-row.late .chr.ca{color:var(--critical)}
+  .mon-row.onscene{border-left-color:var(--sec)}
+  .mon-row.done{border-left-color:var(--good); opacity:.5}
+  .mon-row.alert{grid-template-columns:16px 1fr; border-left-style:dashed; border-left-color:var(--warn);
+    background:color-mix(in srgb,var(--warn) 9%,var(--surface-2))}
+  .mon-row.alert .eye{font-size:12px; text-align:center}
+  .mon-row.ghost{grid-template-columns:16px 1fr; border-left-color:var(--serious); opacity:.72;
+    background:repeating-linear-gradient(135deg,var(--surface-2),var(--surface-2) 5px,transparent 5px,transparent 10px)}
+  .mon-row.ghost .gx{color:var(--serious); text-align:center; font-weight:700; font-size:11px}
+  @keyframes monpulse{0%,100%{background:var(--surface-2)}50%{background:color-mix(in srgb,var(--critical) 16%,var(--surface-2))}}
+  .mon-empty{display:flex; align-items:center; gap:9px; padding:9px 9px; font-size:12.5px; color:var(--ink-2)}
+  .mon-empty .dot{width:9px; height:9px; border-radius:50%; background:var(--good); flex:none;
+    animation:breathe 2.4s ease-in-out infinite}
+  @keyframes breathe{0%,100%{opacity:.3; transform:scale(.85)}50%{opacity:1; transform:scale(1)}}
+  /* end-of-day summary overlay (bilan) */
+  #summary{position:fixed; inset:0; z-index:30; display:flex; align-items:center;
+    justify-content:center; background:color-mix(in srgb,var(--bg) 84%,transparent);
+    backdrop-filter:blur(5px); padding:20px; overflow-y:auto}
+  #summary.hidden{display:none}
+  #summary .card{max-width:660px; width:100%; background:var(--surface); border:1px solid var(--line);
+    border-radius:16px; padding:22px 26px; box-shadow:0 18px 52px rgba(0,0,0,.32);
+    max-height:92vh; overflow-y:auto}
+  #summary h3{margin:0 0 2px; font-size:19px}
+  #summary .sub{color:var(--ink-2); font-size:12.5px; margin:0 0 8px}
+  #summary .grp{margin:16px 0 2px; font-size:11px; text-transform:uppercase; letter-spacing:.5px;
+    color:var(--ink-3); font-weight:650}
+  #summary .cols{display:grid; grid-template-columns:1fr 104px 104px 14px; gap:10px; font-size:9.5px;
+    text-transform:uppercase; letter-spacing:.4px; color:var(--ink-3); padding:2px 0}
+  #summary .cols .a{color:var(--good); text-align:right} #summary .cols .s{color:var(--critical); text-align:right}
+  /* cartes KPI dépliables (<details>) */
+  .sum-kpi{border-top:1px solid var(--line)}
+  .sum-kpi>summary{display:grid; grid-template-columns:1fr 104px 104px 14px; gap:10px;
+    align-items:baseline; padding:8px 0; cursor:pointer; list-style:none}
+  .sum-kpi>summary::-webkit-details-marker{display:none}
+  .sum-kpi>summary:hover .k{color:var(--accent)}
+  .sum-kpi .k{font-weight:600; color:var(--ink); font-size:13px}
+  .sum-kpi .v{font-variant-numeric:tabular-nums; font-weight:700; font-size:13px; text-align:right;
+    display:flex; gap:5px; justify-content:flex-end; align-items:baseline; flex-wrap:wrap}
+  .sum-kpi .v.a{color:var(--good)} .sum-kpi .v.s{color:var(--critical)}
+  .sum-kpi .best{font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;
+    color:var(--good); border:1px solid var(--good); border-radius:4px; padding:0 3px; white-space:nowrap}
+  .sum-kpi .chev{color:var(--ink-3); transition:transform .2s; font-size:15px; text-align:center; line-height:1}
+  .sum-kpi[open] .chev{transform:rotate(90deg)}
+  .sum-kpi .exp{font-size:11.5px; color:var(--ink-2); padding:0 0 9px; line-height:1.45; max-width:62ch}
+  .sum-kpi .exp b{color:var(--ink)}
+  .sum-hero{margin:8px 0 2px; padding:13px 15px; border-radius:12px;
+    background:color-mix(in srgb,var(--good) 13%,transparent); border-left:4px solid var(--good)}
+  .sum-hero .big{font-size:27px; font-weight:800; color:var(--good); font-variant-numeric:tabular-nums; line-height:1.05}
+  .sum-hero .cap{font-size:12px; color:var(--ink-2); margin-top:2px}
+  #summary .honesty{font-size:11px; color:var(--ink-3); margin-top:14px; line-height:1.4}
+  #summary .btns{display:flex; gap:8px; margin-top:16px}
+  #summary button{border:none; border-radius:9px; padding:9px 16px; font-size:13px; font-weight:600; cursor:pointer}
+  #summary .close{background:var(--accent); color:#fff; flex:1}
+  #summary .replay{background:var(--surface-2); color:var(--ink); border:1px solid var(--line)}
 </style>
 </head>
 <body>
@@ -228,6 +305,7 @@
     <span class="io"><span class="in" id="pop-in">▲0</span> <span class="out" id="pop-out">▼0</span> /min</span>
   </div>
   <div class="clock"><span id="clock">--:--</span><span class="day" id="daylab"></span></div>
+  <button class="iconbtn" id="summary-btn" title="Bilan de la journée">Σ</button>
   <button class="iconbtn" id="demo" title="Mode démo / projecteur (masque le panneau)">▣</button>
   <button class="iconbtn" id="theme" title="Thème clair / sombre">◐</button>
 </header>
@@ -248,16 +326,18 @@
         <li><span class="g">✚▲■</span><span><b>Les formes</b> = les équipes (médical, sécurité, logistique) qui se déplacent à chaque décision du CSP.</span></li>
         <li><span class="g">◉</span><span><b>Les pastilles pulsées</b> = les incidents ; un <b>faisceau</b> relie l'équipe dépêchée à l'incident.</span></li>
         <li><span class="g">〜</span><span><b>Trait orange pointillé</b> = la prévision TimesFM (T+2h) : elle monte <b>avant</b> le réel.</span></li>
+        <li><span class="g">⏱</span><span><b>Panneau de droite</b> = surveillance temps réel : deux chronos par incident (<b>prédictif</b> vs <b>sans</b>).</span></li>
+        <li><span class="g">Σ</span><span><b>Bouton Σ</b> (en haut) = le <b>bilan</b> chiffré et expliqué de la journée ; s'ouvre aussi à la fin.</span></li>
       </ul>
       <button id="welcome-ok">J'ai compris ▶</button>
     </div></div>
+    <div id="summary" class="hidden"><div class="card" id="summary-card"></div></div>
   </div>
   <aside>
-    <div class="impact" id="impact" style="display:none">
-      <h2><span>Impact — gestion prédictive</span>
-        <span class="cols"><span class="a">avec</span><span class="s">sans</span></span></h2>
-      <div id="impact-rows"></div>
-      <div class="imp-save" id="impact-save"></div>
+    <div class="monitor" id="monitor">
+      <h2><span>Incidents — surveillance temps réel</span>
+        <span class="cnt" id="mon-cnt"></span></h2>
+      <div class="mon-list" id="mon-list"></div>
     </div>
     <div class="kpis">
       <div class="kpi open"><div class="n" id="k-open">0</div><div class="l">ouverts</div></div>
@@ -366,9 +446,31 @@ function _inPoly(x,y,poly){ let ins=false;
     if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi+1e-9)+xi)) ins=!ins;
   } return ins; }
 function zoneAtPt(x,y){ for(const z of ZONES){ if(_inPoly(x,y,H.zones[z].poly)) return z; } return null; }
-const INC_SPAWN={};
-F.forEach(fr=>{ for(const it of fr.inc){ if(!(it[0] in INC_SPAWN))
-  INC_SPAWN[it[0]]={f:fr.t, zone:zoneAtPt(it[1],it[2])}; } });
+// INC_SPAWN : 1re apparition (+ zone, type, parent) ; INC_ONSCENE : 1re frame
+// « forces sur place » (état treating=2) ; INC_END : 1re frame résolu(3)/non
+// couvert(4). Sert au panneau de surveillance (chrono live) et au décompte.
+const INC_SPAWN={}, INC_ONSCENE={}, INC_END={};
+F.forEach(fr=>{ for(const it of fr.inc){ const id=it[0], st=it[4];
+  if(!(id in INC_SPAWN)) INC_SPAWN[id]={f:fr.t, zone:zoneAtPt(it[1],it[2]),
+    type:it[6], parent:(it[9]!==undefined?it[9]:-1)};
+  if(st===2 && !(id in INC_ONSCENE)) INC_ONSCENE[id]=fr.t;
+  if((st===3||st===4) && !(id in INC_END)) INC_END[id]=fr.t;
+} });
+const RESP_TARGET = (H.comparison&&H.comparison.targets&&H.comparison.targets.response_target_min)||8;
+
+// INC_TWIN : associe chaque incident de BASE affiché (frames) à son jumeau de
+// l'évaluateur (temps de réponse AVEC vs SANS), par (zone,type) dans l'ordre
+// d'apparition. Donne les DEUX timers par incident (prédictif vs non prédictif).
+const INC_TWIN={};
+if(CMP){
+  const liveBase = Object.keys(INC_SPAWN).map(id=>({id:+id, ...INC_SPAWN[id]}))
+    .filter(m=>m.parent===-1).sort((a,b)=>a.f-b.f);
+  const byKey={};
+  for(const p of CMP.per_incident){ const k=p.zone+'|'+p.type; (byKey[k]||(byKey[k]=[])).push(p); }
+  const cur={};
+  for(const m of liveBase){ const k=m.zone+'|'+INC_TYPES[m.type]; const arr=byKey[k]||[];
+    const i=cur[k]||0; if(i<arr.length){ INC_TWIN[m.id]=arr[i]; cur[k]=i+1; } }
+}
 
 // ---------- theme ----------
 const root = document.documentElement;
@@ -675,7 +777,7 @@ function draw(){
     ctx.fillText(z, TX(c[0]), TY(c[1])-5*dpr);
     ctx.font = `${Math.max(10,11.5*scale)*dpr}px -apple-system,sans-serif`;
     ctx.fillStyle = over?'#d03b3b':(isDark()?'rgba(255,255,255,.62)':'rgba(0,0,0,.55)');
-    let lbl = Math.round(d*100)+'%';
+    let lbl = Math.round(d*100)+'%'+(d>1.0?' ⚠ surcap.':'');
     if(layers.prevision && fp>0.35){
       const arrow = fp>d+0.04?' ↗':fp<d-0.04?' ↘':' →';
       lbl += `  ›  ${Math.round(fp*100)}%${arrow}`;
@@ -951,10 +1053,11 @@ function updatePanels(si){
   document.getElementById('pop-n').textContent=(k.onsite||0).toLocaleString('fr');
   document.getElementById('pop-in').textContent='▲'+(k.flow_in||0);
   document.getElementById('pop-out').textContent='▼'+(k.flow_out||0);
-  renderImpact(si);                         // compteurs jumeaux (chaque pas)
+  renderMonitor();                          // surveillance incidents (chaque frame)
+  renderForecast();                         // sparklines dynamiques (chaque frame)
   if(si===lastSi) return;                   // le reste ne change qu'au pas
   lastSi=si;
-  renderAlloc(step); renderForecast(si); renderFeed(si);
+  renderAlloc(step); renderFeed(si);
 }
 function curChapter(f){ let lab=null; for(const [m,l] of CHAPTERS){ if(f>=m) lab=l; } return lab; }
 
@@ -973,75 +1076,235 @@ function renderAlloc(step){
   t.innerHTML=h; prevAlloc=a;
 }
 
-// sparkline : densité RÉELLE (trait plein) vs prévision TimesFM recalée de +2h
-// (trait orange pointillé « ce que le modèle voyait venir »). L'orange monte
-// avant le plein -> l'anticipation devient visible.
-function renderForecast(si){
-  const box=document.getElementById('fbars'); let h='';
+// sparkline DYNAMIQUE : la densité RÉELLE (trait plein) se dessine au fil de la
+// lecture jusqu'au playhead ; la prévision TimesFM (orange) est projetée 2 h
+// DEVANT le playhead (le modèle « voit venir ») -> l'orange monte, puis 2 h plus
+// tard le trait plein le rejoint. Appelée à CHAQUE frame (tracé progressif).
+function renderForecast(){
+  const box=document.getElementById('fbars');
+  const fs=frame/FPS_STEP;                       // position fractionnaire (en pas)
+  const cur=Math.min(Math.floor(fs),NSTEP-1);
   const W=100, Hh=34, pad=1.5;
   const X=t=>t/(NSTEP-1)*W;
   const Y=v=>Hh-pad - Math.max(0,Math.min(1.05,v))*(Hh-2*pad);
   const yThr=Y(THR).toFixed(1);
+  let h='';
   for(const z of ZONES){
-    let real='', fc='';
-    for(let t=0;t<NSTEP;t++){
-      const v=(H.steps[t].dens||{})[z]||0;
-      real += (t?'L':'M')+X(t).toFixed(1)+' '+Y(v).toFixed(1)+' ';
-    }
-    for(let t=0;t<NSTEP;t++){
-      const src=t-HORIZON_STEPS;                 // prévision faite 2h plus tôt
-      if(src<0) continue;
-      const v=(H.steps[src].forecast_peak||{})[z]||0;
-      fc += (fc?'L':'M')+X(t).toFixed(1)+' '+Y(v).toFixed(1)+' ';
-    }
-    const nowReal=(H.steps[si].dens||{})[z]||0;
-    const nowFc=(H.steps[si].forecast_peak||{})[z]||0;
-    const px=X(si).toFixed(1);
+    // réel : jusqu'au playhead (dernier point interpolé pour un tracé fluide)
+    let real='';
+    for(let t=0;t<=cur;t++){ const v=(H.steps[t].dens||{})[z]||0;
+      real+=(t?'L':'M')+X(t).toFixed(1)+' '+Y(v).toFixed(1)+' '; }
+    let hx=X(cur), hy=Y((H.steps[cur].dens||{})[z]||0);
+    if(cur<NSTEP-1 && fs>cur){ const v0=(H.steps[cur].dens||{})[z]||0,
+      v1=(H.steps[cur+1].dens||{})[z]||0, vi=v0+(v1-v0)*(fs-cur);
+      hx=X(fs); hy=Y(vi); real+='L'+hx.toFixed(1)+' '+hy.toFixed(1)+' '; }
+    // prévision : le pic prévu à l'instant t, tracé 2 h à DROITE (t+2h) -> devance
+    let fc='';
+    for(let t=0;t<=cur;t++){ const v=(H.steps[t].forecast_peak||{})[z]||0;
+      const px=X(Math.min(t+HORIZON_STEPS,NSTEP-1));
+      fc+=(fc?'L':'M')+px.toFixed(1)+' '+Y(v).toFixed(1)+' '; }
+    const nowReal=(H.steps[cur].dens||{})[z]||0;
+    const nowFc=(H.steps[cur].forecast_peak||{})[z]||0;
     h+=`<div class="spark">
       <div class="lab"><span>${z}</span>
         <span><span class="now">réel ${Math.round(nowReal*100)}%</span> ·
-        <span class="fc">prév. ${Math.round(nowFc*100)}%</span></span></div>
+        <span class="fc">prév.+2h ${Math.round(nowFc*100)}%</span></span></div>
       <svg viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none">
         <line x1="0" y1="${yThr}" x2="${W}" y2="${yThr}" stroke="var(--critical)"
               stroke-width=".5" stroke-dasharray="2 2" opacity=".55"/>
         <path d="${fc}" fill="none" stroke="var(--warn)" stroke-width="1.4"
               stroke-dasharray="2.5 2" opacity=".9"/>
-        <path d="${real}" fill="none" stroke="${zoneColor(z)}" stroke-width="1.4"/>
-        <line x1="${px}" y1="0" x2="${px}" y2="${Hh}" stroke="var(--ink-3)" stroke-width=".5" opacity=".7"/>
+        <path d="${real}" fill="none" stroke="${zoneColor(z)}" stroke-width="1.6"/>
+        <circle cx="${hx.toFixed(1)}" cy="${hy.toFixed(1)}" r="1.3" fill="${zoneColor(z)}"/>
       </svg></div>`;
   }
   box.innerHTML=h;
 }
-// bandeau IMPACT « avec / sans » : compteurs jumeaux qui DIVERGENT au fil de la
-// journée (séries cumulées de l'évaluateur). Le SANS est simulé sur les mêmes
-// données -> l'écart qui se creuse EST la démonstration de l'utilité.
-function renderImpact(si){
-  if(!CMP) return;
-  const A=CMP.avec.step_series[si]||CMP.avec.step_series[CMP.avec.step_series.length-1];
-  const S=CMP.sans.step_series[si]||CMP.sans.step_series[CMP.sans.step_series.length-1];
-  const eur=v=>v.toLocaleString('fr');
-  const row=(k,a,s)=>`<div class="imp-row"><span class="k">${k}</span>`+
-    `<span class="v a">${a}</span><span class="v s">${s}</span></div>`;
-  const av=CMP.avec, sv=CMP.sans;
-  const sep=`<div class="imp-sep">bilan journée — réaction en chaîne</div>`;
-  document.getElementById('impact-rows').innerHTML =
-    row('Arrivée médic', A.n_resp?A.mean_resp+'′':'—', S.n_resp?S.mean_resp+'′':'—')+
-    row('Attente FoodCourt', A.wait+'′', S.wait+'′')+
-    row('Clients perdus', A.cum_lost, S.cum_lost)+
-    sep+
-    row('Blessés induits', av.mean_induced, sv.mean_induced)+
-    row('R (enchaînement)', av.r_eff, sv.r_eff)+
-    row('Issue victimes', Math.round(av.mean_outcome*100)+'%', Math.round(sv.mean_outcome*100)+'%');
-  const saved=S.cum_rev-A.cum_rev;
-  document.getElementById('impact-save').innerHTML =
-    `💶 CA sauvé à ${H.steps[si].clock} : <b>${eur(saved)} €</b>`+
-    (saved>0?` <span style="color:var(--ink-3)">(${eur(S.cum_lost-A.cum_lost)} clients retenus)</span>`:'');
-  // chip flottant (mode démo, panneau masqué)
-  const rt = S.n_resp? `<b>${A.mean_resp}′</b> vs <b>${S.mean_resp}′</b>` : '—';
-  document.getElementById('impact-float').innerHTML =
-    `<div class="t">Impact — avec / sans gestion prédictive</div>`+
-    `<div class="big">${eur(saved)} €<span class="u"> de ventes sauvées</span></div>`+
-    `<div class="sub">Médic ${rt} · issue victimes <b>${Math.round(av.mean_outcome*100)}%</b> vs <b>${Math.round(sv.mean_outcome*100)}%</b> · R ${av.r_eff} vs ${sv.r_eff}</div>`;
+// ===========================================================================
+// SURVEILLANCE TEMPS RÉEL DES INCIDENTS (panneau live) — une ligne par incident,
+// avec DEUX timers : « prédictif » (notre système, piloté par les frames de la
+// carte) et « sans » (jumeau modélisé par l'évaluateur). Le chrono prédictif
+// court de l'apparition jusqu'à l'arrivée des forces sur place puis se fige ; le
+// jumeau « sans » continue de courir jusqu'à sa valeur modélisée -> l'écart se
+// lit incident par incident. S'y ajoutent les ALERTES caméra (précurseurs) et
+// les lignes FANTÔMES (blessés induits qui n'existeraient QUE sans le système).
+// ===========================================================================
+function fmtChrono(mins){ const s=Math.max(0,Math.round(mins*60));
+  return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); }
+// libellés courts (colonne étroite du panneau, à côté des 2 timers)
+function monShort(t){return {fallen_person:'chute', crowd_surge:'mvt foule',
+  suspicious_object:'objet', fight:'bagarre'}[t]||t;}
+const MON_ICON = {0:c=>ICON.fallen(c), 1:c=>ICON.burst(c), 2:c=>ICON.obj(c), 3:c=>ICON.fight(c)};
+const MON_COL  = {0:'--critical', 1:'--serious', 2:'--warn', 3:'--sec'};
+function renderMonitor(){
+  const [f0]=curFrames();
+  const M=frame;                              // minute-de-journée (1 frame = 1 min)
+  const rows=[];
+  // A. incidents réels en cours (carte) — timers jumeaux prédictif / sans
+  for(const it of f0.inc){
+    const id=it[0], st=it[4], type=it[6];
+    const meta=INC_SPAWN[id]; if(!meta) continue;
+    const zone=meta.zone||'zone', name=monShort(INC_TYPES[type]||type);
+    const induced = meta.parent!==-1;
+    let cls, aTxt, stx;
+    if(st===3){ cls='done'; aTxt='✓'; stx='résolu'; }
+    else if(st===4){ cls='late'; aTxt=fmtChrono((INC_END[id]||M)-meta.f); stx='non couvert ✗'; }
+    else if(st===2){ cls='onscene'; aTxt=fmtChrono((INC_ONSCENE[id]||M)-meta.f); stx='forces sur place ✓'; }
+    else { const el=M-meta.f; cls=el>RESP_TARGET?'late':'pending'; aTxt=fmtChrono(el);
+           stx=st===1?'équipe en route…':'en attente…'; }
+    let sTxt='—', sBad=false;
+    const tw=INC_TWIN[id];
+    if(tw){
+      const sv=(INC_TYPES[type]==='fallen_person')? tw.resp_sans : tw.contain_sans;
+      if(sv==null){ sTxt='✗'; sBad=true; }
+      else { sTxt='~'+fmtChrono(Math.min(M-meta.f, sv)); sBad=(sv>RESP_TARGET); }
+    }
+    const prio = cls==='late'?0:cls==='pending'?1:cls==='onscene'?2:3;
+    rows.push({kind:'inc', type, zone, name, cls, aTxt, sTxt, sBad, stx, prio,
+               spawnF:meta.f, induced, col:cssVar(MON_COL[type]||'--critical')});
+  }
+  // B. alertes caméra du pas courant (précurseurs éphémères)
+  const si=Math.min(Math.floor(frame/FPS_STEP),H.steps.length-1);
+  for(const al of (H.steps[si].alerts||[]))
+    rows.push({kind:'alert', zone:al.zone, name:al.types.map(monShort).join(', '),
+               dens:al.density, prio:-1});
+  // C. lignes fantômes : blessés induits ÉVITÉS (n'existent que dans le scénario sans)
+  if(CMP) for(const g of (CMP.sans.rep_timeline||[])){
+    if(!g.induced) continue;
+    const end=(g.resolved!=null?g.resolved:g.spawn+25)+6;
+    if(M>=g.spawn && M<end)
+      rows.push({kind:'ghost', zone:g.zone, name:monShort(g.type)+' induit',
+                 prio:4, spawnF:g.spawn});
+  }
+  rows.sort((a,b)=> a.prio-b.prio || (b.spawnF||0)-(a.spawnF||0));
+  const active=rows.filter(r=>r.kind==='inc'&&r.cls!=='done').length;
+  document.getElementById('mon-cnt').textContent = active? active+' en cours' : '';
+  const list=document.getElementById('mon-list');
+  if(!rows.length){
+    list.innerHTML='<div class="mon-empty"><span class="dot"></span>'+
+      'Aucun incident en cours — surveillance active</div>';
+  } else {
+    let html='<div class="mon-head"><span></span>'+
+      '<span class="ca">prédictif</span><span class="cs">sans</span></div>';
+    html+=rows.map(r=>{
+      if(r.kind==='alert')
+        return `<div class="mon-row alert"><span class="eye">👁</span>`+
+          `<span class="who"><b>${r.zone}</b> · alerte ${r.name}`+
+          `<span class="st"> — caméra${r.dens?', dens. '+r.dens:''}</span></span></div>`;
+      if(r.kind==='ghost')
+        return `<div class="mon-row ghost"><span class="gx">✕</span>`+
+          `<span class="who"><b>${r.zone}</b> · ${r.name}`+
+          `<span class="st"> — évité par le système</span></span></div>`;
+      const ic=(MON_ICON[r.type]||MON_ICON[0])(r.col);
+      const ind=r.induced?'<span class="ind">induit</span>':'';
+      return `<div class="mon-row ${r.cls}">${ic}`+
+        `<span class="who"><b>${r.zone}</b> · ${r.name}${ind}`+
+        `<span class="st"> — ${r.stx}</span></span>`+
+        `<span class="chr ca">${r.aTxt}</span>`+
+        `<span class="chr cs${r.sBad?' bad':''}">${r.sTxt}</span></div>`;
+    }).join('');
+    list.innerHTML=html;
+  }
+  // chip flottant (mode démo, panneau masqué) : décompte LIVE, pas de bilan
+  const fl=document.getElementById('impact-float');
+  if(fl) fl.innerHTML=`<div class="t">Surveillance temps réel</div>`+
+    `<div class="big">${active}<span class="u"> incident${active>1?'s':''} en cours</span></div>`+
+    `<div class="sub">Rép. moyenne <b>${f0.kpi.mean_rt}′</b> · résolus <b>${f0.kpi.resolved}</b> · `+
+    `non couv. <b>${f0.kpi.uncovered}</b></div>`;
+}
+
+// ---- écran de BILAN de fin de journée (avec / sans, expliqué KPI par KPI) ----
+let _summaryShown=false;
+function hideSummary(){ document.getElementById('summary').classList.add('hidden'); }
+function showSummary(){ buildSummary(); document.getElementById('summary').classList.remove('hidden'); }
+function buildSummary(){
+  const card=document.getElementById('summary-card');
+  if(!CMP){ card.innerHTML='<h3>Bilan indisponible</h3>'+
+    '<p class="sub">L\'évaluateur (kpis.py) n\'a pas encore produit kpi_comparison.json.</p>'+
+    '<div class="btns"><button class="close" onclick="hideSummary()">Fermer</button></div>'; return; }
+  const av=CMP.avec, sv=CMP.sans, T=CMP.targets||{};
+  const eur=v=>Math.round(v).toLocaleString('fr');
+  const nb=v=>(Math.round(v*10)/10).toLocaleString('fr');      // 1 décimale, virgule FR
+  const mn=v=>nb(v)+' min';
+  const saved=sv.lost_revenue_eur-av.lost_revenue_eur, kept=sv.lost_customers-av.lost_customers;
+  const fa=T.first_aid_target_min||4, als=T.response_target_min||8;
+  const runs=av.n_runs||CMP.avec.n_runs||40;
+  // carte KPI dépliable (<details>) : ligne compacte + badge « mieux » sur la
+  // colonne gagnante ; le dépliant donne définition + calcul + SOURCE (concis).
+  const kpi=(name, aTxt, sTxt, aNum, sNum, higher, detail)=>{
+    const aWin = higher ? aNum>=sNum-1e-9 : aNum<=sNum+1e-9;
+    const badge='<span class="best">✓ mieux</span>';
+    return `<details class="sum-kpi"><summary><span class="k">${name}</span>`+
+      `<span class="v a">${aTxt}${aWin?badge:''}</span>`+
+      `<span class="v s">${sTxt}${aWin?'':badge}</span><span class="chev">›</span></summary>`+
+      `<div class="exp">${detail}</div></details>`;
+  };
+  card.innerHTML =
+    `<h3>Bilan de la journée</h3>`+
+    `<p class="sub">La même journée rejouée avec les <b>mêmes incidents</b>, en gestion `+
+      `<b>prédictive</b> (prévision + détection auto + ré-allocation) vs <b>réactive</b> (sans). `+
+      `Chaque ligne est <b>dépliable</b> pour le détail et la source. Moyennes sur ${runs} rejeux.</p>`+
+    `<div class="sum-hero"><div class="big">${eur(saved)} € de ventes sauvées</div>`+
+      `<div class="cap">≈ ${eur(kept)} clients retenus au FoodCourt, qui seraient repartis sans `+
+      `commander faute d'un service assez rapide au pic.</div></div>`+
+    `<div class="cols"><span></span><span class="a">prédictif</span><span class="s">sans</span></div>`+
+    `<div class="grp">Réponse aux incidents — chaîne de secours</div>`+
+    kpi('Détection', mn(av.mean_detect_min), mn(sv.mean_detect_min),
+      av.mean_detect_min, sv.mean_detect_min, false,
+      'Délai apparition → signalement. <b>Avec</b> : caméra + flux optique en temps réel '+
+      '(~1 min ; l\'inférence vision tourne à 40 fps, Marsden 2016). <b>Sans</b> : découverte par '+
+      'un agent, ralentie par l\'occlusion en foule — un opérateur vidéo humain ne repère que '+
+      '~46 % des incidents (Piza &amp; Moton 2023).')+
+    kpi('Premiers gestes', mn(av.mean_first_aid_min), mn(sv.mean_first_aid_min),
+      av.mean_first_aid_min, sv.mean_first_aid_min, false,
+      `Temps avant les 1ers gestes d'un secouriste. <b>Cible BLS &lt; ${fa} min</b> (médecine de `+
+      'rassemblement de masse, StatPearls / NIH NBK597369). Ces gestes « gèlent » la dégradation '+
+      'de la victime en attendant le médecin.')+
+    kpi('Arrivée médecin', mn(av.mean_response_min), mn(sv.mean_response_min),
+      av.mean_response_min, sv.mean_response_min, false,
+      `Temps avant une équipe médicale sur place. <b>Cible ALS &lt; ${als} min</b> (StatPearls / NIH). `+
+      'Un intervenant est ralenti en traversant une foule dense (diagramme piéton de Weidmann).')+
+    kpi(`Médecin en &lt; ${als} min`, av.pct_within_target+' %', sv.pct_within_target+' %',
+      av.pct_within_target, sv.pct_within_target, true,
+      `Part des victimes atteintes par le médecin <b>avant la cible ALS de ${als} min</b>. `+
+      '<b>Plus haut = mieux.</b>')+
+    `<div class="grp">Réaction en chaîne — un incident non contenu en engendre d'autres</div>`+
+    kpi('Blessés induits', '≈ '+nb(av.mean_induced)+'/j', '≈ '+nb(sv.mean_induced)+'/j',
+      av.mean_induced, sv.mean_induced, false,
+      `Chutes provoquées par un mouvement de foule ou une bagarre non contenus à temps `+
+      `(moyenne/jour sur ${runs} rejeux). Elles n'existent QUE faute d'intervention rapide — `+
+      'c\'est précisément ce que le système évite.')+
+    kpi('R (enchaînement)', nb(av.r_eff), nb(sv.r_eff),
+      av.r_eff, sv.r_eff, false,
+      'Comme un <b>R épidémique</b> : nombre moyen d\'incidents secondaires engendrés par un '+
+      'incident. R = 0,5 ⇒ 10 mouvements de foule engendrent ~5 blessés. <b>R &lt; 1</b> : ça '+
+      's\'éteint ; <b>R ≥ 1</b> : cascade (trajectoire type Astroworld).')+
+    kpi('Catastrophe (MCE)', Math.round(av.pct_mce_runs)+' % des jours',
+      Math.round(sv.pct_mce_runs)+' % des jours', av.pct_mce_runs, sv.pct_mce_runs, false,
+      'Part des rejeux atteignant un <b>« mass casualty event »</b> — mouvement de foule laissé '+
+      'non contenu ~40 min. Seuil calé sur Astroworld 2021 (1er appel 21h07 → MCE déclaré 21h47, '+
+      'chronologie officielle HPD).')+
+    kpi('État de santé des victimes', Math.round(av.mean_outcome*100)+' %',
+      Math.round(sv.mean_outcome*100)+' %', av.mean_outcome, sv.mean_outcome, true,
+      'Score agrégé, <b>100 % = indemne</b>. Prise en charge plus tôt = dégradation stoppée plus '+
+      'tôt → score plus élevé avec le système. <b>Plus haut = mieux.</b> Indicateur de risque, '+
+      'PAS une prédiction de décès individuel.')+
+    `<div class="grp">Service — FoodCourt</div>`+
+    kpi('Attente (moy. · pic)', mn(av.foodcourt_wait_mean_min)+' · '+nb(av.foodcourt_wait_p95_min),
+      mn(sv.foodcourt_wait_mean_min)+' · '+nb(sv.foodcourt_wait_p95_min),
+      av.foodcourt_wait_p95_min, sv.foodcourt_wait_p95_min, false,
+      'Attente à la file (moyenne · p95 du pic). Un client qui voit plus de '+
+      `${T.balk_threshold_min||10} min d'attente <b>renonce</b> avec une probabilité croissante `+
+      '(balking exponentiel, modèle Erlang-A de Palm 1957 / Garnett-Mandelbaum-Reiman 2002).')+
+    kpi('Clients perdus', eur(av.lost_customers), eur(sv.lost_customers),
+      av.lost_customers, sv.lost_customers, false,
+      `Clients repartis sans commander (balking) sur la journée ; chacun ≈ ${T.basket_eur||14} € de `+
+      'panier perdu (données POS atVenu, 650+ festivals).')+
+    `<p class="honesty">Le scénario « sans » est un modèle calibré sur des données réelles `+
+      `(cibles médicales BLS/ALS, diagramme piéton de Weidmann, files d'attente Erlang-A, `+
+      `littérature crowd-safety) — détail et sources dans docs/calibration-donnees-reelles.md.</p>`+
+    `<div class="btns"><button class="close" onclick="hideSummary()">Fermer ▶</button>`+
+      `<button class="replay" onclick="hideSummary();seek(0);setPlaying(true)">↺ Rejouer</button></div>`;
 }
 
 function renderLead(){
@@ -1139,6 +1402,8 @@ playBtn.onclick=()=>setPlaying(!playing);
 rangeEl.addEventListener('input',()=>{ frame=+rangeEl.value; setPlaying(false); draw(); });
 function seek(f){ frame=Math.min(NF-1,Math.max(0,f)); rangeEl.value=Math.floor(frame); draw(); }
 addEventListener('keydown',e=>{
+  if(e.key==='Escape'){ hideSummary();
+    document.getElementById('welcome').classList.add('hidden'); return; }
   if(e.code==='Space'){e.preventDefault(); setPlaying(!playing); return;}
   if(e.code==='ArrowRight'){ setPlaying(false); seek(frame+ (e.shiftKey?FPS_STEP:1)); }
   else if(e.code==='ArrowLeft'){ setPlaying(false); seek(frame- (e.shiftKey?FPS_STEP:1)); }
@@ -1242,7 +1507,8 @@ function tick(ts){
     if(lastTs!=null){
       const dt=(ts-lastTs)/1000;
       frame += dt*BASE_MIN_PER_SEC*speed;
-      if(frame>=NF-1){ frame=NF-1; setPlaying(false); }
+      if(frame>=NF-1){ frame=NF-1; setPlaying(false);
+        if(!_summaryShown){ _summaryShown=true; showSummary(); } }   // bilan en fin de journée
       rangeEl.value=Math.floor(frame);
     }
     lastTs=ts;
@@ -1261,19 +1527,24 @@ const welcome=document.getElementById('welcome');
 document.getElementById('welcome-ok').onclick=()=>welcome.classList.add('hidden');
 welcome.addEventListener('click',e=>{ if(e.target===welcome) welcome.classList.add('hidden'); });
 
+// ---------- bilan de fin (bouton Σ + clic hors-carte pour fermer) ----------
+document.getElementById('summary-btn').onclick=()=>showSummary();
+document.getElementById('summary').addEventListener('click',e=>{
+  if(e.target.id==='summary') hideSummary(); });
+
 // permet de partager un instant précis : festival_map.html?f=255&theme=light&demo=1
 const _q=new URLSearchParams(location.search);
 if(_q.get('theme')==='light'||_q.get('theme')==='dark') root.setAttribute('data-theme',_q.get('theme'));
 if(_q.has('f')) frame=Math.min(NF-1,Math.max(0,+_q.get('f')||0));
 if(_q.get('demo')==='1') setDemo(true);
 if(_q.get('play')==='1') setPlaying(true);
+if(_q.get('summary')==='1'){ _summaryShown=true; showSummary(); }
 // accueil affiché au 1er lancement (sauf lien profond / démo / déjà vu)
 let _seen=false; try{ _seen=localStorage.getItem('fmap_seen')==='1'; }catch(_){}
 if(!_seen && !_q.has('f') && _q.get('demo')!=='1'){ welcome.classList.remove('hidden'); }
 try{ localStorage.setItem('fmap_seen','1'); }catch(_){}
 rangeEl.value=Math.floor(frame);
 
-if(CMP) document.getElementById('impact').style.display='block';
 buildLegend(); renderLead(); resize(); lastSi=-1; draw();
 requestAnimationFrame(tick);
 </script>

@@ -32,9 +32,9 @@ Gestion réelle d'un festival sans système intelligent (sources en bas) :
 |---|---|---|
 | Stewards en poste fixe + rondes, remontée par radio | ~1 steward / 100–250 festivaliers (Purple Guide ch. 13) | délai de DÉCOUVERTE humaine d'un incident ∝ densité de staff dans la zone |
 | Chaîne observation → radio → décision → départ | délais documentés ; défaillances réelles (Astroworld 2021, retards de communication) | + délai radio/décision fixe (2–5 min) avant dispatch |
-| Cibles médicales de rassemblement de masse | BLS < 4 min, ALS < 8 min, défib < 5 min (StatPearls/NIH) | cibles affichées sur le dashboard — le baseline les rate, le système les tient |
+| Cibles médicales de rassemblement de masse | BLS < 4 min, ALS < 8 min (StatPearls/NIH NBK597369) ; défib 3-5 min (Resuscitation Council UK — PAS StatPearls) | cibles affichées sur le dashboard — le baseline les rate, le système les tient |
 | Ressources en attente à la base, dispatch réactif | pratique par défaut sans prévision | allocation STATIQUE (tout à l'Entrance/base), trajet complet à chaque incident |
-| File d'attente restauration | abandon à ~8 min d'attente ; 73 % abandonnent > 5 min ; SLA de service ≈ 2 min/client | modèle de file au FoodCourt : service ∝ staff présent, abandons → CA perdu |
+| File d'attente restauration | abandon moyen ~6 min (Omnico) ; 80 % n'attendent pas plus de 15 min (Waitwhile 2024) ; tolérance festival 6-10 min ; SLA de service ≈ 2 min/client | modèle de file au FoodCourt : service ∝ staff présent, abandons → CA perdu |
 
 Les deux scénarios rejouent **les mêmes** `attendance.csv` / `events.csv`
 (principe d'équité déjà appliqué dans `mas.py` : mêmes incidents, seule la
@@ -146,5 +146,6 @@ puis 1 slide dashboard comparaison. L'ablation reste dans le rapport.
 - Ticket Fairy — Crowd Monitoring During the Festival (limites du monitoring
   humain, réactivité) ; Crowd Surge Contingencies (Astroworld, retards de
   communication) ; Food Vendor SLAs (< 2 min/client) — ticketfairy.com/blog
-- Statistiques d'attente : abandon ~8 min, 73 % > 5 min —
+- Statistiques d'attente : abandon moyen ~6 min (Omnico), 80 % ≤ 15 min (Waitwhile 2024) —
+  qless.com/gone-in-6-minutes · waitwhile.com/blog/consumer-survey-waiting-in-line-2024 ; ancien «73 %/5 min» retiré (intraçable) —
   scanqueue.com/blog/state-of-customer-waiting-2026, wavetec.com/blog/queue-management

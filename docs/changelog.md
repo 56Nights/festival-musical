@@ -63,6 +63,79 @@ Doc : `docs/incident-model.md`. Fichiers : `config.py`,
 - Visuel : **liens parent→enfant** des blessés induits, cordon sur surge+fight,
   bandeau « bilan chaîne » (blessés induits / R / issue).
 
+## 5. Calibration sur données réelles (document de référence)
+Doc : `docs/calibration-donnees-reelles.md`. Fichiers : aucun changement de
+code encore — recherche sourcée (académique / guides officiels / plans de
+licensing publics) qui mappe chaque paramètre de `config.py` à sa valeur
+réelle, en préparation des étapes « réalisme » (dimensions, temps de
+déplacement, postes de staff, files visibles).
+- **Confirmés tels quels** : ALS 8 min (StatPearls), SLA 2 min/client,
+  abandon ~8 min, binôme sécurité sur bagarre (SIA), −7 %/min sans RCP (AHA),
+  PPR 12-13,5/1000 (Glastonbury 2022, festival autrichien).
+- **À corriger** : `MCE_MIN` 30 → 40 (timeline officielle HPD d'Astroworld :
+  21h07 premier 911 → 21h47 MCE) ; `TREAT_MIN` (5,12) → (8,20) (revue
+  systématique des temps sur place EMS) ; `MEAL_BASKET_EUR` 12 → 14 (atVenu,
+  POS de 650+ festivals) ; « 73 % abandonnent > 5 min » intraçable → Omnico
+  5 min 54 s / Waitwhile 2024 ; « défib < 5 min » n'est pas dans StatPearls →
+  Resuscitation Council UK.
+- **Nouvelles bases** : Weidmann 1,34 m/s + formule de Kladek (vitesse ∝
+  densité) ; Standon Calling CMP (arène 15 357 m², 3-4 p/m² devant scène,
+  egress 70 p/m/min) comme festival de référence ; Green Guide 660 pers/h
+  par point d'entrée ; échelle recommandée `METERS_PER_U = 0.5`.
+
+## 6. Réalisme (dimensions réelles, trajets, files) + refonte du panneau incidents
+Doc : `docs/calibration-donnees-reelles.md`. Fichiers : `config.py`,
+`simulation/geometry.py`, `simulation/mas.py`, `simulation/kpis.py`,
+`simulation/replay_sim.py`, `dashboard/viewer_template.html`, `run_demo.py`.
+- **Échelle physique réelle** : `METERS_PER_U = 0.5` (site 500×350 m ≈ 17,5 ha,
+  MainStage ≈ 14 700 m² ≈ arène réelle de Standon Calling). `WALK_SPEED` dérivé
+  de la vitesse libre de Weidmann (1,34 m/s).
+- **Durées de trajet dérivées de la géométrie** (fin de la matrice arbitraire) :
+  `mas.travel_time` = longueur d'allée × échelle ÷ vitesse d'intervention ;
+  temps **intra-zone** non nul (même au sein d'un stage) ; un intervenant est
+  **ralenti en foule dense** (diagramme fondamental, dans `kpis.py`).
+- **Postes de staff ordonnés** par zone (`STAFF_POSTS`, du plus au moins
+  optimal) : les équipes stationnent aux crash-barriers / guichets, pas au hasard.
+- **Files de restauration** : les points s'alignent devant les stands FoodCourt
+  au pic (file affichée = file mesurée) ; **vitesse de la foule ∝ densité**.
+- **Valeurs re-sourcées** : `TREAT_MIN` (8-20 min), `MCE_MIN` 40 (Astroworld
+  officiel), `MEAL_BASKET_EUR` 14 (atVenu), `FIRST_AID_TARGET_MIN` 4 (BLS),
+  `NECK_EXIT_CAP_STEP` dérivé de 70 pers/m/min (Green Guide).
+- **Panneau « surveillance temps réel »** (remplace l'ancien bandeau impact
+  confus) : une ligne par incident en cours, chrono live jusqu'à l'arrivée des
+  forces sur place, état « aucun incident en cours ».
+- **Écran de bilan de fin** (bouton Σ / `?summary=1` / fin de lecture) :
+  KPIs avec/sans **expliqués un par un**, chiffre-titre « CA sauvé ».
+- Scénario MAS re-calé (taux 0,15, hors saturation) : CSP p95 ~29 min / ~0
+  non-couvert vs uniforme ~38 min / dizaines de non-couverts.
+
+## 7. Monitoring comparatif, bilan sourcé, prévision dynamique, balking
+Fichiers : `simulation/kpis.py`, `simulation/replay_sim.py`, `config.py`,
+`dashboard/viewer_template.html`.
+- **Dispatch typé dans la vue** : la SÉCURITÉ *contient* les mouvements de foule /
+  bagarres / objets (acte résolutif : pending → cordon en route → sur place →
+  contenu) ; le MÉDICAL ne traite plus que les chutes. Les surges apparaissent
+  enfin dans le panneau incidents.
+- **Timers jumeaux par incident** : deux chronos par ligne — « prédictif » (piloté
+  par les frames) et « sans » (jumeau modélisé de l'évaluateur) — l'écart se lit
+  incident par incident. Ajout de `contain_min` (avec+sans) et d'une
+  `rep_timeline` représentative dans `kpis.py`.
+- **Alertes caméra** (lignes 👁 pointillées) et **lignes fantômes** (blessés
+  induits « évités par le système », depuis la timeline SANS) dans le panneau.
+- **Prévision TimesFM dynamique** : les sparklines se dessinent au fil de la
+  lecture, la courbe de prévision projetée **2 h devant** le playhead (anticipation
+  visible) — plus de barre-curseur.
+- **Bilan de fin refondu** : cartes **dépliables** (définition + calcul + source),
+  badge « ✓ mieux » sur la colonne gagnante, renommages (« Médecin en < 8 min »,
+  « État de santé des victimes 100 % = indemne », « Catastrophe (MCE) — % des
+  jours »), lisibilité Monte-Carlo (« ≈ 4,9/j », « 22 % des jours ») et format
+  français (virgule, « min »).
+- **Clients perdus = balking sourcé** : à l'arrivée, le client observe la file et
+  renonce avec P(W) = 1 − exp(−(W−10)/4) (Erlang-A, Palm 1957 ; GMR 2002) —
+  remplace le seuil sec à 8 min ; une file réelle se forme au pic. Résultat
+  AVEC/SANS : ~218 vs ~2170 clients perdus (~27 000 € sauvés).
+- UX : étiquette « ⚠ surcap. » au-delà de 100 %, touche Échap, accueil mis à jour.
+
 ## Résultats de démo (40 tirages, mêmes incidents) — avec / sans
 | KPI | avec | sans |
 |---|---|---|

@@ -45,7 +45,7 @@ Ce que confirme chaque contrôle de la **vue simulation** :
 | Contrôle | Ce qu'il vérifie |
 |---|---|
 | `replay_sim.py` (auto-vérif) | conservation de la foule (600 points sur 360 images), tout incident réel finit *résolu* ou *non couvert*, effectif = 24 unités (médical 4 · sécurité 12 · logistique 8) |
-| `geometry.py` | les longueurs de chemin restent cohérentes avec la matrice `TRAVEL` du MAS (autoritative) — la vue ne peut pas contredire les KPIs |
+| `geometry.py` | l'échelle (1 u = 0,5 m, calée sur un festival réel), les aires par zone en m²/pers·m² et les durées de trajet **dérivées de la géométrie** (source de vérité des KPIs) restent dans une plage plausible — la vue et les KPIs partagent la même géométrie |
 | `run_demo.py` | la boucle écrit `control_log.json` **avec** `truth_incidents`, puis `replay.json` et `festival_map.html` se génèrent sans erreur |
 
 Inspection manuelle de la vue (aucun serveur requis) : ouvrir
@@ -173,11 +173,23 @@ minute, horloge 10h → minuit) :
 - zones colorées par densité (alerte pulsée au-delà du seuil), migrations en
   vagues au fil du programme (bascule vers MainStage pour la tête d'affiche,
   retour des campeurs au Camping la nuit) ;
-- équipes (✚ médical, ▲ sécurité, ■ logistique) qui **se déplacent
-  physiquement** à chaque ré-allocation du CSP ;
-- incidents réels répartis sur la journée (après-midi · ruée · plein headliner
-  · egress) → mobilisent une équipe (trajet → prise en charge → ✓ résolu, ou
-  ✗ non couvert après 30 min), distinction **détecté / manqué** par le CNN ;
+- équipes (✚ médical, ▲ sécurité, ■ logistique) postées à des **emplacements
+  par défaut ordonnés du plus au moins optimal** par zone (crash-barrier devant
+  scène, guichets à l'entrée…) et qui **se déplacent physiquement** à chaque
+  ré-allocation du CSP ;
+- **files de restauration** : au pic déjeuner/dîner, les festivaliers
+  s'**alignent en file devant les stands** du FoodCourt (la file affichée = la
+  file mesurée par l'évaluateur) ; la foule **ralentit dans les zones denses**
+  (diagramme fondamental piéton) ;
+- incidents réels répartis sur la journée → mobilisent une équipe (trajet →
+  prise en charge → ✓ résolu, ou ✗ non couvert après 30 min), distinction
+  **détecté / manqué** par le CNN ;
+- **panneau de surveillance temps réel** : une ligne par incident en cours, un
+  chrono qui court de l'apparition jusqu'à l'arrivée des forces sur place puis se
+  fige, état « aucun incident en cours » sinon ;
+- **écran de bilan en fin de journée** (bouton Σ ou `?summary=1`) : chaque KPI
+  avec / sans gestion prédictive, **expliqué en une phrase** (clients perdus,
+  blessés induits, R, issue des victimes…) ;
 - lecture / pause / vitesse (×1–×8) / défilement, marqueurs de ré-allocation
   sur la timeline, journal d'événements et compteurs de KPI synchronisés.
 
@@ -210,9 +222,14 @@ Repères : `f=30` (matin, site vide), `f=610` (ruée + file), `f=785` (egress).
   hors-ligne, repli saisonnier-naïf documenté
 - **CNN** : chute ≈ 99 % · objet ≈ 88–99 % · densité MAE ≈ 0,10 (données synthétiques)
 - **Boucle intégrée** : alertes CNN détectées → ré-allocations CSP déclenchées
-- **MAS** : l'allocation CSP réduit le pire temps de réponse p95 de ~25 à ~18 min
-  vs une allocation uniforme naïve (20 runs Monte-Carlo, incidents pondérés
-  par la densité de foule)
+- **MAS** : au pic (incidents concentrés sur MainStage), l'allocation CSP tient
+  un p95 de ~29 min et ~0 incident non couvert, contre ~38 min et des dizaines
+  de non-couverts pour une allocation uniforme naïve (20 runs Monte-Carlo)
+- **Impact avec / sans gestion prédictive** (évaluateur `kpis.py`, mêmes
+  incidents) : détection ~3,5 vs ~5,8 min, arrivée médic ~3,3 vs ~7,0 min
+  (**93 % vs 62 %** sous la cible ALS de 8 min), issue des victimes 68 % vs 43 %,
+  ~26 000 € de ventes FoodCourt sauvées — bilan détaillé et expliqué à la fin de
+  la vue simulation
 
 ## Justification des choix (Compétence 3 — Concevoir)
 
@@ -245,13 +262,20 @@ Aucun modèle lourd n'est entraîné localement :
 - Les images sont des vues de dessus **simulées** (conformément au sujet) ;
   le pipeline (données → entraînement → inférence → alerte → ré-allocation)
   est en revanche complet et fonctionnel de bout en bout.
-- La matrice de distances inter-zones est simplifiée ; un plan réel du site
-  la remplacerait sans changer l'architecture.
+- Les durées de trajet ne sont plus une matrice arbitraire : elles sont
+  **dérivées de la géométrie du site** (longueur d'allée réelle × échelle
+  0,5 m/u ÷ vitesse d'intervention 1,5 m/s), l'échelle étant calée sur le plan
+  de gestion de foule public d'un festival réel comparable (Standon Calling —
+  arène main stage ~15 000 m²). Un intervenant traversant une foule dense est
+  ralenti selon le diagramme fondamental piéton de Weidmann. Tous les paramètres
+  chiffrés (temps de réponse cibles, débits, panier moyen, vitesses) sont
+  sourcés dans `docs/calibration-donnees-reelles.md`.
 - La vue simulation échantillonne la foule (1 point ≙ K personnes, ≤ 800
   points) et **interpole** les positions entre deux relevés de 15 min : les
   points ne sont pas des individus suivis mais un rendu représentatif du flux
-  agrégé. Les durées de trajet des équipes suivent la matrice TRAVEL
-  (autoritative) ; la géométrie du plan ne fixe que la position affichée.
+  agrégé. La géométrie du plan est désormais la **source de vérité** des durées
+  (la matrice `TRAVEL` du MAS en est dérivée) — vue et KPIs partagent la même
+  carte et ne peuvent donc pas se contredire.
 - Le modèle de population est **agrégé par type** (comptes par pas), pas
   micro-agent individuel : il reproduit les courbes réelles (arrivées, file,
   egress, campeurs) sans prétendre suivre chaque festivalier. La journée

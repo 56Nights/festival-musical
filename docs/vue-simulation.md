@@ -7,10 +7,12 @@ du modèle de population qui l'alimente. Objectif : comprendre le *pourquoi*.
 La vue **rejoue** ce que la boucle de contrôle a déjà décidé, à partir des
 artefacts existants (`attendance.csv`, `flow.csv`, `events.csv`,
 `control_log.json`). Une seule source de vérité → l'écran ne peut pas
-contredire les KPIs. La logique de réponse aux incidents et les durées de
-trajet reprennent le MAS (`simulation/mas.py`), la matrice `TRAVEL` restant
-**autoritative** pour les durées ; la géométrie ne fixe que la *position*
-affichée (calibration vérifiée par `geometry.py`).
+contredire les KPIs. Depuis la calibration réelle, c'est désormais la
+**géométrie du site qui est autoritative** pour les durées : `mas.TRAVEL` en
+dérive (longueur d'allée × échelle 0,5 m/u ÷ vitesse d'intervention), si bien
+que la vue et les KPIs partagent la même carte (calibration vérifiée par
+`geometry.py` : aires m²/pers·m², durées dans une plage plausible).
+cf. `docs/calibration-donnees-reelles.md`.
 
 ## 2. Rendu : frames pré-calculées + lecteur HTML autonome
 `replay_sim.py` calcule l'état du monde image par image → `replay.json` ;

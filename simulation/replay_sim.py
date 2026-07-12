@@ -129,7 +129,7 @@ class Dot:
     apparaissent à la porte et disparaissent en sortant).
     """
     __slots__ = ("id", "zone", "oz", "x", "y", "state", "path", "t0", "dur",
-                 "dead", "sx", "sy", "u", "ang", "rx", "ry")
+                 "dead", "sx", "sy", "u", "ang", "rx", "ry", "queued")
 
     def __init__(self, did, zone, x, y, state="idle"):
         self.id = did
@@ -149,6 +149,7 @@ class Dot:
         self.ang = 0.0              # angle autour du focal (fixe)
         self.rx = x                 # cible de repos courante (glissement doux)
         self.ry = y
+        self.queued = False         # aligné dans la file d'un stand FoodCourt
 
 
 class Responder:
@@ -237,6 +238,23 @@ class ReplayEngine:
         self.wait_in = []             # FILE d'entrée au col (avant = index 0, au col)
         self.wait_out = []            # FILE de sortie au col
         self.response_times = []
+        self.fc_queue = self._load_fc_queue()   # file FoodCourt par pas (personnes)
+
+    def _load_fc_queue(self):
+        """File d'attente FoodCourt (personnes) par pas, lue de l'évaluateur
+        (scénario AVEC de kpi_comparison.json). Alimente l'alignement visuel des
+        points devant les stands -> la file VUE = la file MESURÉE (même source de
+        vérité). Vide si l'évaluateur n'a pas encore tourné."""
+        path = os.path.join(C.OUT, "kpi_comparison.json")
+        if not os.path.exists(path):
+            return {}
+        try:
+            with open(path) as fh:
+                ss = json.load(fh)["avec"]["service_series"]
+        except (KeyError, ValueError):
+            return {}
+        return {self.steps[0] + idx: s.get("queue", 0)
+                for idx, s in enumerate(ss)}
 
     def _mk_dot(self, zone, x, y, state):
         d = Dot(self._next_dot_id, zone, x, y, state)
@@ -319,7 +337,7 @@ class ReplayEngine:
             path = [(d.x, d.y), G.GATE_POINT] + list(wp[1:-1]) + [G.random_point_in(zone, rng)]
             d.zone = zone
             d.path, d.t0, d.state = path, f, "moving"
-            d.dur = max(1.0, G.path_length(path) / C.WALK_SPEED * rng.uniform(0.8, 1.2))
+            d.dur = self._walk_dur(path, zone, f)
         else:
             self._spawn_dot(zone, f)                 # entonnoir vide -> flux libre
 
@@ -360,8 +378,11 @@ class ReplayEngine:
         for rtype in RES_TYPES:
             zc = self.init_alloc[rtype]
             for z in C.ZONES:
-                for _ in range(int(zc[z])):
-                    x, y = G.random_point_in(z, rng, margin=14)
+                posts = G.STAFF_POSTS[z]
+                for k in range(int(zc[z])):
+                    px, py = posts[k % len(posts)]     # k-ième unité -> k-ième poste
+                    x = px + rng.uniform(-7, 7)
+                    y = py + rng.uniform(-7, 7)
                     self.responders.append(Responder(uid, rtype, z, x, y))
                     uid += 1
 
@@ -389,6 +410,24 @@ class ReplayEngine:
             self._next_inc_id += 1
 
         self._repack(step, f)          # recale les cibles de repos (tassement)
+        self._food_queue(step, f)      # aligne la file devant les stands FoodCourt
+
+    def _food_queue(self, step, f):
+        """Aligne des points FoodCourt en file serpentine devant les stands, à
+        hauteur de la file d'attente MESURÉE par l'évaluateur (fc_queue). Les
+        points en file ne flânent quasiment plus (ils patientent)."""
+        fc = [d for d in self.dots if d.state == "idle" and d.zone == "FoodCourt"]
+        for d in fc:
+            d.queued = False
+        n_q = int(round(self.fc_queue.get(step, 0) / self.scale))
+        if n_q <= 0 or not fc:
+            return
+        n_q = min(n_q, len(fc), 48)
+        slots = G.food_queue_slots(n_q)
+        fc.sort(key=lambda d: d.id)                 # ordre stable (file peu mouvante)
+        for d, (sx, sy) in zip(fc, slots):
+            d.queued = True
+            d.rx, d.ry = sx, sy
 
     # ---- foule dynamique : migrations internes + files au col ----
     def _update_crowd(self, step, f):
@@ -563,6 +602,18 @@ class ReplayEngine:
         self._pending = keep
 
     # ---- mise en mouvement ----
+    def _walk_dur(self, path, dest_zone, f):
+        """Durée de marche d'un point : longueur / vitesse libre, RALENTIE quand la
+        zone de destination est dense (diagramme fondamental de Weidmann — au pic
+        pré-headliner la foule avance au ralenti). Pénalité bornée ~×3."""
+        base = G.path_length(path) / C.WALK_SPEED
+        if dest_zone in G.PEAK_LOCAL_PPSM:
+            step = self.log[min(f // self.frames_per_step,
+                                self.n_steps - 1)]["step"]
+            ppsm = self.density(step, dest_zone) * G.PEAK_LOCAL_PPSM[dest_zone]
+            base /= max(0.33, G.crowd_speed_factor(ppsm))
+        return max(1.0, base * rng.uniform(0.8, 1.2))
+
     def _spawn_dot(self, dz, f):
         """Arrivée : apparaît DEHORS (bas), franchit le col, rejoint sa zone."""
         sx = BOTTOM_EXIT[0] + rng.uniform(-45, 45)
@@ -573,15 +624,14 @@ class ReplayEngine:
         target = G.random_point_in(dz, rng)
         path = [(sx, sy), G.GATE_POINT] + list(wp[1:-1]) + [target]
         d.path, d.t0, d.state = path, f, "moving"
-        d.dur = max(1.0, G.path_length(path) / C.WALK_SPEED * rng.uniform(0.8, 1.2))
+        d.dur = self._walk_dur(path, dz, f)
 
     def _start_dot_walk(self, d, old, dz, f, from_pos=None):
         wp = G.path_between(old, dz)
         target = G.random_point_in(dz, rng)
         start = from_pos if from_pos is not None else (d.x, d.y)
         path = [start] + list(wp[1:-1]) + [target]
-        length = G.path_length(path)
-        dur = max(1.0, length / C.WALK_SPEED * rng.uniform(0.8, 1.2))
+        dur = self._walk_dur(path, dz, f)
         d.oz = _zidx(old)                               # origine -> dégradé vers dz
         d.zone = dz
         d.path, d.t0, d.dur, d.state = path, f, dur, "moving"
@@ -596,10 +646,21 @@ class ReplayEngine:
         d.oz = _zidx(d.zone)                            # origine -> dégradé vers la porte
         d.path, d.t0, d.dur, d.state = path, f, dur, "leaving"
 
-    def _start_move(self, u, old, dz, f, back):
-        """Déplace une équipe de `old` vers `dz` ; durée = TRAVEL (autoritatif)."""
+    def _post_for(self, rtype, zone):
+        """Poste de stationnement pour la prochaine unité `rtype` affectée à
+        `zone` : les postes sont pris dans l'ordre optimal->moins optimal
+        (STAFF_POSTS), en round-robin selon le nombre déjà présent."""
+        n = sum(1 for x in self.responders if x.rtype == rtype and x.home == zone)
+        posts = G.STAFF_POSTS[zone]
+        px, py = posts[max(0, n - 1) % len(posts)]
+        return (px + rng.uniform(-7, 7), py + rng.uniform(-7, 7))
+
+    def _start_move(self, u, old, dz, f, back, dest=None):
+        """Déplace une équipe de `old` vers `dz` ; durée = TRAVEL (autoritatif).
+        `dest` (poste précis) fourni lors d'une ré-allocation, sinon aléatoire."""
         wp = G.path_between(old, dz)
-        dest = G.random_point_in(dz, rng, margin=14)
+        if dest is None:
+            dest = G.random_point_in(dz, rng, margin=14)
         path = [(u.x, u.y)] + list(wp[1:-1]) + [dest]
         dur = max(1.0, travel_time(old, dz))
         u.path, u.t0, u.dur, u.dest, u.state = path, f, dur, dest, "relocating"
@@ -627,7 +688,8 @@ class ReplayEngine:
             old = u.home
             u.home = dz
             if u.state == "idle":
-                self._start_move(u, old, dz, f, back=False)
+                self._start_move(u, old, dz, f, back=False,
+                                 dest=self._post_for(rtype, dz))
 
     # ---- pas de temps (1 min / frame) ----
     def _advance_movers(self, f):
@@ -658,7 +720,7 @@ class ReplayEngine:
                 pass                                        # positions -> _settle_funnel
             else:                                           # posé : glisse vers la cible
                 x0, y0, x1, y1 = G.ZONE_BBOX[d.zone]
-                amp = wander.get(d.zone, 0.5)
+                amp = 0.12 if d.queued else wander.get(d.zone, 0.5)
                 d.x += (d.rx - d.x) * PACK_GLIDE + rng.normal(0, amp)
                 d.y += (d.ry - d.y) * PACK_GLIDE + rng.normal(0, amp)
                 d.x = min(max(d.x, x0 + 5), x1 - 5)
@@ -687,7 +749,7 @@ class ReplayEngine:
     def _on_arrival(self, u, f):
         inc = u.incident
         u.state = "busy"
-        treat = float(rng.uniform(5, 12))
+        treat = float(rng.uniform(*C.TREAT_MIN))
         u.busy_until = f + treat
         inc.state = "treating"
         inc.treat_start = f
@@ -699,10 +761,15 @@ class ReplayEngine:
         inc.state = "resolved"
         inc.resolved_at = f
         u.incident = None
-        self._start_move(u, inc.zone, u.home, f, back=True)
+        self._start_move(u, inc.zone, u.home, f, back=True,
+                         dest=self._post_for(u.rtype, u.home))
 
     def _dispatch(self, f):
-        pending = [i for i in self.incidents if i.state == "pending"]
+        # dispatch MÉDICAL : uniquement les CHUTES (surge/fight/objet sont
+        # résolus par le containment de la SÉCURITÉ, cf. _contain). Aligne la
+        # carte sur le modèle d'impact v2 (kpis.py) : dispatch typé.
+        pending = [i for i in self.incidents
+                   if i.state == "pending" and i.itype == "fallen_person"]
         pending.sort(key=lambda i: (-i.sev, i.spawn))
         for inc in pending:
             if f < inc.spawn:
@@ -728,40 +795,72 @@ class ReplayEngine:
             inc.unit = unit
             inc.state = "responding"
 
-    def _escort(self, f):
-        """Cordon de sécurité : sur une BAGARRE (crowd_surge) active, les 2
-        équipes de sécurité les plus proches et libres viennent former un
-        périmètre autour de l'incident, puis rentrent quand il est clos.
+    # unités et durée de containment par type (aligné sur config / kpis v2)
+    _CONTAIN_UNITS = {"crowd_surge": None, "fight": None, "suspicious_object": 1}
+    _CONTAIN_DUR = {"crowd_surge": None, "fight": None, "suspicious_object": 8.0}
 
-        Couche de PRÉSENTATION : les KPIs restent gouvernés par la réponse
-        médicale (fidèle à `mas.py`) ; ce cordon ne fait que rendre la réaction
-        des forces de l'ordre visible sur le plan."""
-        surges = [i for i in self.incidents
-                  if i.itype in ("crowd_surge", "fight") and f >= i.spawn
-                  and i.state in ("pending", "responding", "treating")]
-        active = {i.id for i in surges}
-        for inc in surges:
-            assigned = [u for u in self.responders if u.escort is inc]
-            need = 2 - len(assigned)
-            if need <= 0:
+    def _contain_spec(self, itype):
+        if itype == "crowd_surge":
+            return C.SURGE_CONTAIN_UNITS, C.SURGE_CONTAIN_MIN
+        if itype == "fight":
+            return C.FIGHT_CONTAIN_UNITS, C.FIGHT_CONTROL_MIN
+        return 1, 8.0                                   # objet suspect
+
+    def _contain(self, f):
+        """Containment par la SÉCURITÉ — acte RÉSOLUTIF des mouvements de foule,
+        bagarres et objets suspects (dispatch typé, fidèle au modèle d'impact v2).
+        Cycle : pending -> responding (cordon en route) -> treating (cordon SUR
+        PLACE, containment en cours) -> resolved (contenu). Les N équipes les plus
+        proches forment le périmètre ; une fois toutes en place, le containment
+        court pendant la durée requise. Non contenu après 30 min -> non couvert."""
+        act = [i for i in self.incidents
+               if i.itype in ("crowd_surge", "fight", "suspicious_object")
+               and f >= i.spawn
+               and i.state in ("pending", "responding", "treating")]
+        for inc in act:
+            need, dur = self._contain_spec(inc.itype)
+            # non contenu à temps -> non couvert (relâche le cordon)
+            if inc.treat_start is None and f - inc.spawn >= ABANDON_MIN:
+                inc.state = "uncovered"
                 continue
-            free = [u for u in self.responders if u.rtype == "security"
-                    and u.state == "idle" and u.escort is None]
-            free.sort(key=lambda u: (u.x - inc.x) ** 2 + (u.y - inc.y) ** 2)
-            for k in range(min(need, len(free))):
-                u = free[k]
-                u.escort = inc
-                ang = 2 * np.pi * (len(assigned) + k) / 2.0 + 0.6
-                rx, ry = inc.x + np.cos(ang) * 34, inc.y + np.sin(ang) * 34
-                u.path, u.t0 = [(u.x, u.y), (rx, ry)], f
-                u.dur = max(1.0, travel_time(u.home, inc.zone))
-                u.dest, u.state = (rx, ry), "relocating"
-        for u in self.responders:                    # relève : incident clos -> retour
-            if u.escort is not None and u.escort.id not in active:
+            assigned = [u for u in self.responders if u.escort is inc]
+            # dispatch du cordon (tant que le containment n'a pas démarré)
+            if inc.treat_start is None and len(assigned) < need:
+                free = [u for u in self.responders if u.rtype == "security"
+                        and u.state == "idle" and u.escort is None]
+                free.sort(key=lambda u: (u.x - inc.x) ** 2 + (u.y - inc.y) ** 2)
+                for k in range(min(need - len(assigned), len(free))):
+                    u = free[k]
+                    u.escort = inc
+                    ang = 2 * np.pi * (len(assigned) + k) / max(need, 1) + 0.6
+                    rx, ry = inc.x + np.cos(ang) * 34, inc.y + np.sin(ang) * 34
+                    u.path, u.t0 = [(u.x, u.y), (rx, ry)], f
+                    u.dur = max(1.0, travel_time(u.home, inc.zone))
+                    u.dest, u.state = (rx, ry), "relocating"
+                if inc.state == "pending":
+                    inc.state = "responding"
+                assigned = [u for u in self.responders if u.escort is inc]
+            # cordon complet SUR PLACE -> démarre le containment
+            on_scene = [u for u in assigned if u.state == "perimeter"]
+            if inc.treat_start is None and need > 0 and len(on_scene) >= need:
+                inc.treat_start = f
+                inc.treat_end = f + dur
+                inc.state = "treating"
+                inc.unit = assigned[0]                  # ancre du faisceau viewer
+                self.response_times.append(f - inc.spawn)
+            # containment terminé -> contenu
+            if inc.treat_end is not None and f >= inc.treat_end \
+                    and inc.state == "treating":
+                inc.state = "resolved"
+                inc.resolved_at = f
+        # relève : cordon d'un incident clos (contenu ou non couvert) -> retour poste
+        for u in self.responders:
+            if u.escort is not None and u.escort.state in ("resolved", "uncovered"):
                 old = u.escort.zone
                 u.escort = None
-                if u.state == "perimeter":
-                    self._start_move(u, old, u.home, f, back=True)
+                if u.state in ("perimeter", "relocating"):
+                    self._start_move(u, old, u.home, f, back=True,
+                                     dest=self._post_for(u.rtype, u.home))
 
     def _choose_zone(self, zone):
         homes = Counter(u.home for u in self.responders if u.rtype == "medical")
@@ -856,7 +955,7 @@ class ReplayEngine:
                 self._release_due(f)
                 self._incident_chains(f)
                 self._dispatch(f)
-                self._escort(f)
+                self._contain(f)
                 self._settle_funnel(f)
                 self._advance_movers(f)
                 self._apply_shock(f)
@@ -941,13 +1040,18 @@ def _comparison():
             "mean_mce": side["mean_mce"],
             "mean_outcome": side["mean_outcome"],
             "foodcourt_wait_mean_min": side["foodcourt_wait_mean_min"],
+            "foodcourt_wait_p95_min": side.get("foodcourt_wait_p95_min", 0),
             "lost_customers": side["lost_customers"],
             "lost_revenue_eur": side["lost_revenue_eur"],
+            "pct_mce_runs": side.get("pct_mce_runs", 0),
+            "n_runs": side.get("n_runs", C.MC_RUNS),
             "step_series": side["step_series"],
+            "rep_timeline": side.get("rep_timeline", []),   # base + induits (lignes fantômes)
         }
 
     a, s = cmp["avec"], cmp["sans"]
-    # horodatages jumeaux par incident (clé = ordre d'apparition)
+    # horodatages jumeaux par incident de BASE (clé = ordre d'apparition) : les
+    # timers jumeaux du panneau (temps de réponse AVEC vs SANS) en dérivent.
     pa = {p["idx"]: p for p in a["per_incident"]}
     ps = {p["idx"]: p for p in s["per_incident"]}
     per_inc = []
@@ -957,6 +1061,7 @@ def _comparison():
             "step": A["step"], "zone": A["zone"], "type": A["type"],
             "detect_avec": A["detect_min"], "detect_sans": S.get("detect_min"),
             "resp_avec": A["response_min"], "resp_sans": S.get("response_min"),
+            "contain_avec": A.get("contain_min"), "contain_sans": S.get("contain_min"),
         })
     return {"avec": slim(a), "sans": slim(s),
             "targets": cmp["targets"], "per_incident": per_inc}

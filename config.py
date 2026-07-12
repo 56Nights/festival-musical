@@ -65,8 +65,11 @@ VISITOR_MIX = {                    # part de la population journalière par type
 }
 PEAK_POPULATION = 16000            # population simultanée cible au pic (calibrage)
 DAY_TURNOVER = 1.25                # visiteurs uniques / jour = pic x turnover
-GATE_CAP_STEP = 560                # personnes admises / pas (goulot : sature l'Entrée tôt)
-NECK_EXIT_CAP_STEP = 1550          # débit de SORTIE du col (< egress de pointe -> file)
+GATE_CAP_STEP = 560                # personnes admises / pas ≙ 3-4 points d'entrée à 660 pers/h (Green Guide/SGSA)
+# débit de SORTIE du col, DÉRIVÉ d'un débit d'egress réel : 70 pers/m/min (Green
+# Guide déclassé terrain humide/public alcoolisé, cf. Standon Calling) × largeur.
+EXIT_WIDTH_M = 2.0                 # largeur effective du col de sortie (m) — goulot volontairement étroit
+NECK_EXIT_CAP_STEP = int(70 * EXIT_WIDTH_M * STEP_MINUTES)   # = 2100 / pas (< egress de pointe -> file)
 EXIT_CAP_STEP = 1800               # personnes sorties / pas (egress plus rapide)
 MOBILITY = {                       # fraction re-décidant sa zone / pas (inertie)
     "camper": 0.15, "early": 0.20, "planner": 0.20, "headliner": 0.08,
@@ -103,7 +106,9 @@ HEADLINER_END_MIN = 750
 # rassemblement de masse (BLS 4 min / ALS 8 min — StatPearls/NIH), ratios de
 # stewards (Purple Guide ch. 13), SLA vendeur ~2 min/client et abandon de file
 # ~8 min (Ticket Fairy / statistiques d'attente).
-RESPONSE_TARGET_MIN = 8.0        # cible d'arrivée d'une équipe compétente (ALS)
+RESPONSE_TARGET_MIN = 8.0        # cible d'arrivée d'une équipe médicale (ALS < 8 min, StatPearls NBK597369)
+FIRST_AID_TARGET_MIN = 4.0       # cible de premiers gestes (BLS < 4 min, StatPearls NBK597369)
+TREAT_MIN = (8.0, 20.0)          # durée de prise en charge sur place (temps EMS sur site : revue Healthcare 2022, médianes 15-19,5 min)
 MC_RUNS = 40                     # tirages Monte-Carlo (délais de découverte)
 
 # -- détection d'un incident --
@@ -139,8 +144,17 @@ RESERVE_LOGISTICS = 3           # équipes logistiques VOLANTES (réserve mobili
 RESERVE_LEAD_MIN = 45           # avec : anticipation (pré-déployées avant le pic)
 RESERVE_TRIGGER_WAIT_MIN = 5.0  # sans : attente déclenchant l'appel de renfort
 RESERVE_MOBILIZE_STEPS = 2      # sans : délai d'arrivée du renfort (appel + trajet, 30 min)
-MEAL_BASKET_EUR = 12.0          # panier moyen -> CA perdu par client parti
-ABANDON_WAIT_MIN = 8.0          # au-delà de cette attente, le client quitte la file
+MEAL_BASKET_EUR = 14.0          # panier alimentaire moyen (atVenu, données POS 650+ festivals : pivot ~16 $)
+# -- balking (impatience À L'ARRIVÉE au stand) : un client qui voit une attente
+#    ESTIMÉE W repart sans faire la queue avec P(W) = 1 − exp(−(W − seuil)/échelle)
+#    pour W > seuil. Forme bornée de l'Erlang-A / patience exponentielle (Palm
+#    1957 ; Garnett, Mandelbaum & Reiman, *MSOM* 2002). Le « 1/e^(−t) » naïf
+#    diverge ; la forme correcte sature à 1. Seuil 10 min (grâce généreuse, choix
+#    d'équipe) ; échelle calée pour une tolérance moyenne ~6-7 min AU-DELÀ du
+#    seuil (Omnico ~6 min ; tolérance festival 6-10 min, Ticket Fairy).
+BALK_THRESHOLD_MIN = 10.0       # en-deçà, ~personne ne renonce (période de grâce)
+BALK_SCALE_MIN = 4.0            # échelle de la loi exponentielle de patience
+ABANDON_WAIT_MIN = 10.0         # (conservé pour l'affichage : seuil au-delà duquel on renonce)
 MEAL_JOIN_PEAK = 0.30           # part des présents FoodCourt rejoignant la file au pic
 MEAL_JOIN_BASE = 0.015          # appétit de fond hors pic
 MEAL_PEAKS = [                  # pics d'appétit (min depuis 10h, largeur, intensité)
@@ -159,7 +173,7 @@ SURGE_GROWTH = 0.15            # intensité +0,15/min tant que dense et non cont
 SURGE_CHAIN_K = 0.055          # chutes crush induites/min = K · densité · intensité
 SURGE_CONTAIN_UNITS = 3        # équipes SÉCURITÉ pour contenir un surge
 SURGE_CONTAIN_MIN = 5.0        # durée de mise en sécurité une fois sur place
-MCE_MIN = 30.0                 # surge non contenu 30 min -> MASS CASUALTY EVENT
+MCE_MIN = 40.0                 # surge non contenu ~40 min -> MCE (Astroworld : 21h07 1er 911 -> 21h47 MCE, timeline officielle HPD)
 MCE_CRUSH_BURST = 5            # rafale de chutes crush au déclenchement du MCE
 
 FIGHT_GROWTH = 1.30            # intensité ×1,30/min (badauds aspirés)
@@ -184,9 +198,28 @@ INDUCED_DETECT_MIN = 1.0       # incident induit = vu tout de suite (staff sur p
 # décidé (attendance.csv + events.csv + control_log.json). Ce n'est PAS un
 # second simulateur : c'est un jumeau numérique animé des mêmes faits.
 MAP_W, MAP_H = 1000, 700          # unités de carte (u)
-WALK_SPEED = 90.0                 # u / min — meilleur ajustement sur TRAVEL (cf. geometry.py)
 FRAMES_PER_STEP = 15              # 1 frame = 1 minute simulée -> 15 par pas de 15 min
 MAX_DOTS = 800                    # plafond de points de foule affichés (1 point ≙ K pers.)
+
+# ---------- Échelle physique du site (calibration sur données réelles) ----------
+# cf. docs/calibration-donnees-reelles.md §1-3. L'échelle est calée sur le plan
+# de gestion de foule PUBLIC de Standon Calling (festival ~17-38 k pers.) : notre
+# MainStage (~59 000 u²) × METERS_PER_U² ≈ 14 700 m² ≈ l'arène main stage réelle
+# (15 357 m²). Le site simulé mesure donc 500 × 350 m ≈ 17,5 ha — cohérent avec un
+# festival de 16-20 k pers. Les DURÉES de trajet ne sont plus une matrice
+# arbitraire : elles sont DÉRIVÉES de la géométrie (longueur d'allée × échelle ÷
+# vitesse), cf. simulation/mas.py.
+METERS_PER_U = 0.5                # 1 unité de carte = 0,5 m (calé sur Standon Calling)
+# Vitesse de marche — Weidmann 1993 (revue de littérature, ETH Zürich, IVT n°90),
+# via Kretz (arXiv:0901.0170) : vitesse libre 1,34 m/s ; l'écoulement s'arrête à la
+# densité de « jam » 5,4 pers/m² ; diagramme fondamental de Kladek
+#   v(ρ) = v_libre · [1 − exp(−γ(1/ρ − 1/ρ_max))],  γ = 1,913 m⁻².
+WALK_SPEED_MPS = 1.34             # vitesse libre de la foule (Weidmann)
+RESPONDER_SPEED_MPS = 1.5         # staff en intervention (marche soutenue) — hypothèse (facteur ~1,12)
+JAM_DENSITY_PPSM = 5.4            # pers/m² : arrêt de l'écoulement (Weidmann/Kladek)
+FD_GAMMA = 1.913                 # constante de jauge du diagramme fondamental (m⁻²)
+# vitesse d'un point de foule en u/min, DÉRIVÉE de la vitesse libre + échelle
+WALK_SPEED = WALK_SPEED_MPS * 60.0 / METERS_PER_U          # ≈ 161 u/min
 
 # ---------- Chemins ----------
 import os

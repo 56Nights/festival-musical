@@ -81,8 +81,11 @@ naive = {r: {z: t // C.N_ZONES + (1 if i < t % C.N_ZONES else 0)
 print(f"  CSP medical  : {alloc_csp['medical']}")
 print(f"  Naïf medical : {naive['medical']}")
 
-# plannings partagés générés avec le pic — même incidents pour les deux allocations
-shared_schedules = generate_incidents(20, incident_rate=0.25, demand=peak_demand)
+# plannings partagés générés avec le pic — même incidents pour les deux allocations.
+# Taux calé pour rester HORS saturation (les durées de trajet sont désormais
+# réalistes/plus courtes, cf. mas.travel_time dérivé de la géométrie) : à charge
+# modérée l'intelligence du placement CSP se voit sur le p95 ET les non-couverts.
+shared_schedules = generate_incidents(20, incident_rate=0.15, demand=peak_demand)
 
 scenarios = {
     "CSP optimisé": evaluate_scenario(alloc_csp, schedules=shared_schedules),
