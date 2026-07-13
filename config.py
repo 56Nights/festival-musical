@@ -43,10 +43,36 @@ LR = 1e-3
 IMG_SIZE = 64
 EPOCHS_VISION = 6
 DENSITY_ALERT_THRESHOLD = 0.85   # % de capacité déclenchant une alerte
+# Gate de PLAUSIBILITÉ (réduit les faux positifs du CNN) : une « personne au sol »
+# dans une zone quasi vide est physiquement improbable (champ dégagé, visible) —
+# on supprime l'alerte fallen en dessous de ce seuil de densité. Calé pour ne
+# jamais masquer une chute en foule (les chutes dangereuses = zones denses).
+FALLEN_MIN_DENSITY = 0.15
+# Corroboration : une alerte portée par >= ce nombre de signaux (flux/densité/
+# fallen) est « confirmée » ; sinon « à vérifier » (down-rank, pas supprimée).
+CORROBORATION_MIN_SIGNALS = 2
+# Seuils de DÉCISION du CNN en exploitation. Les têtes ont été entraînées à ~30 %
+# de prévalence ; en exploitation la prévalence réelle est ~1 % -> le seuil de
+# Bayes optimal est bien plus haut que 0,5. On opère donc conservateur (moins de
+# faux positifs, au prix d'un rappel plus faible — arbitrage assumé et mesuré).
+CNN_FALLEN_THRESHOLD = 0.70
+CNN_OBJECT_THRESHOLD = 0.90
 
 # ---------- Allocation dynamique ----------
 RESOLVE_EVERY_STEPS = 2          # re-résolution périodique (30 min)
-REASSIGNMENT_PENALTY = 3         # coût de changement d'affectation (stabilité)
+# Coût de changement d'affectation (stabilité opérationnelle). Relever déplacer
+# une équipe à travers un site de 17 ha toutes les 15 min est irréaliste. À 3, la
+# pénalité était écrasée par les termes de couverture (qui changent à chaque pas)
+# -> l'allocation « thrashait ». À 30 (×SCALE=100 = 3000/changement), la stabilité
+# domine les gains de couverture marginaux MAIS reste bien inférieure aux
+# pénalités d'urgence (sév.2 = 80 000/équipe manquante) : une vraie urgence
+# déplace toujours les équipes, une fluctuation de prévision ne le fait plus.
+REASSIGNMENT_PENALTY = 30
+# Hystérésis : hors urgence (déclencheur périodique/prévision), on n'ADOPTE une
+# nouvelle allocation que si elle diffère de la précédente d'au moins ce nombre
+# de mouvements d'équipe — évite les micro-réajustements 0<->1 dus au bruit de
+# prévision. Une urgence (alerte terrain) contourne l'hystérésis : on réagit.
+ALLOC_HYSTERESIS_MOVES = 2
 
 # ---------- Dynamique de population (jour complet simulé) ----------
 # Modèle inspiré d'études réelles de festivals :
@@ -55,8 +81,9 @@ REASSIGNMENT_PENALTY = 3         # coût de changement d'affectation (stabilité
 #  - campeurs présents jour et nuit ; forte inertie de déplacement (les gens
 #    campent autour d'une scène plutôt que de circuler sans cesse) ;
 #  - goulots d'entrée/sortie (files d'attente aux portes).
-# Le site part vide à 10h, se remplit progressivement, culmine à la tête
-# d'affiche, puis se vide ; seuls les campeurs restent la nuit.
+# Les campeurs (~16 % du public) sont déjà présents à l'ouverture (ils dorment
+# sur site) ; le reste du public entre progressivement, la population culmine à
+# la tête d'affiche, puis se vide ; seuls les campeurs restent la nuit.
 VISITOR_MIX = {                    # part de la population journalière par type
     "camper":    0.16,             # sur site dès l'ouverture, dorment au Camping
     "early":     0.26,             # familles / lève-tôt : arrivent tôt, repartent tôt
@@ -220,6 +247,15 @@ JAM_DENSITY_PPSM = 5.4            # pers/m² : arrêt de l'écoulement (Weidmann
 FD_GAMMA = 1.913                 # constante de jauge du diagramme fondamental (m⁻²)
 # vitesse d'un point de foule en u/min, DÉRIVÉE de la vitesse libre + échelle
 WALK_SPEED = WALK_SPEED_MPS * 60.0 / METERS_PER_U          # ≈ 161 u/min
+
+# ---------- Temps horloge ----------
+# Le festival ouvre à 10h. Un pas de simulation = STEP_MINUTES. Toutes les
+# surfaces (carte, dashboard, rapport) parlent l'heure horloge — cette fonction
+# est la SOURCE UNIQUE de la conversion pas -> HH:MM pour éviter toute divergence.
+OPEN_HOUR = 10
+def step_to_hhmm(step: int) -> str:
+    m = (step % STEPS_PER_DAY) * STEP_MINUTES
+    return f"{OPEN_HOUR + m // 60:02d}:{m % 60:02d}"
 
 # ---------- Chemins ----------
 import os

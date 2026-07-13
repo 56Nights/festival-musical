@@ -25,15 +25,18 @@ TYPE_FR = {
     "fallen_person": "personne au sol",
     "suspicious_object": "objet suspect",
     "crowd_surge": "mouvement de foule / densité critique",
+    "fight": "bagarre",
 }
 
 SYSTEM_PROMPT = (
     "Tu es l'assistant du PC sécurité d'un festival de musique. "
-    "À partir des données structurées fournies (alertes détectées par caméra, "
-    "réallocations d'équipes, prévisions d'affluence), rédige un rapport de "
-    "situation bref, factuel et actionnable en français, destiné à un "
-    "responsable d'exploitation non technique. Utilise des phrases courtes. "
-    "Priorise les urgences. N'invente aucune information absente des données."
+    "À partir des données structurées fournies, rédige un rapport de situation "
+    "bref, factuel et actionnable en français, pour un responsable d'exploitation "
+    "non technique. STRUCTURE IMPOSÉE : (1) une SYNTHÈSE de 2-3 phrases en tête "
+    "(nombre d'incidents, pire moment, résultat clé) ; (2) la liste des incidents "
+    "en HEURE HORLOGE (HH:MM), jamais en numéro de pas ; (3) des ACTIONS "
+    "RECOMMANDÉES. Phrases courtes, priorise les urgences confirmées, distingue "
+    "les incidents confirmés des veilles densité. N'invente aucune information."
 )
 
 
@@ -117,32 +120,128 @@ def _impact_section(cmp) -> list:
     ]
 
 
-def _template_fallback(alerts, reallocs, scenarios, comparison=None) -> str:
-    """Rapport déterministe sans LLM — garantit une démo hors ligne."""
-    lines = ["# Rapport de situation — Festival (généré automatiquement)", ""]
-    if alerts:
-        lines.append("## ⚠️ Alertes détectées")
-        for a in alerts:
-            kinds = ", ".join(TYPE_FR.get(k, k) for k in a["types"])
-            lines.append(
-                f"- **Pas {a['step']} — zone {a['zone']}** : {kinds} "
-                f"(densité estimée {a['density']:.0%}). "
-                f"Ré-allocation déclenchée : {a['response']}")
+def _episodes(control_log) -> list:
+    """Regroupe les alertes d'INCIDENT (hors veille densité) en ÉPISODES :
+    alertes consécutives (≤ 2 pas d'écart) de même zone/type fusionnées. Évite
+    le dump de 100+ lignes quasi identiques. Trié par heure."""
+    raw = []
+    for e in control_log:
+        alloc = e.get("allocation") or {}
+        med = alloc.get("medical", {}) if isinstance(alloc.get("medical"), dict) else {}
+        for a in e["alerts"]:
+            if a.get("watch"):
+                continue
+            m = med.get(a["zone"], 0)
+            raw.append({
+                "step": e["step"], "zone": a["zone"],
+                "types": tuple(sorted(a["types"])),
+                "confidence": a.get("confidence", "à vérifier"),
+                "density": a.get("density", 0.0),
+                "med": m if isinstance(m, int) else 0,
+            })
+    raw.sort(key=lambda r: r["step"])
+    episodes, openep = [], {}
+    for r in raw:
+        key = (r["zone"], r["types"])
+        ep = openep.get(key)
+        if ep is not None and r["step"] - ep["end_step"] <= 2:
+            ep["end_step"] = r["step"]
+            ep["density"] = max(ep["density"], r["density"])
+            ep["med"] = max(ep["med"], r["med"])
+            if r["confidence"] == "confirmé":
+                ep["confidence"] = "confirmé"
+        else:
+            ep = {"start_step": r["step"], "end_step": r["step"], "zone": r["zone"],
+                  "types": r["types"], "confidence": r["confidence"],
+                  "density": r["density"], "med": r["med"]}
+            episodes.append(ep)
+            openep[key] = ep
+    episodes.sort(key=lambda e: e["start_step"])
+    return episodes
+
+
+def _actions(control_log, episodes) -> list:
+    """Recommandations ACTIONNABLES dérivées des données (pas seulement descriptif)."""
+    import collections
+    acts = []
+    for ep in [e for e in episodes if e["med"] == 0][:4]:
+        acts.append(f"Couverture médicale nulle en zone {ep['zone']} à "
+                    f"{C.step_to_hhmm(ep['start_step'])} — dépêcher une équipe.")
+    watch_by_zone = collections.Counter()
+    for e in control_log:
+        for a in e["alerts"]:
+            if a.get("watch"):
+                watch_by_zone[a["zone"]] += 1
+    for zone, n in watch_by_zone.most_common(2):
+        if n >= 5:
+            acts.append(f"Zone {zone} sous tension densité prolongée ({n} veilles) — "
+                        f"renforcer la gestion de flux / ouvrir un accès.")
+    if not acts:
+        acts.append("Aucune action corrective prioritaire : la couverture a suivi "
+                    "les incidents.")
+    return acts
+
+
+def _template_fallback(episodes, counts, reallocs, actions,
+                       scenarios, comparison=None) -> str:
+    """Rapport déterministe sans LLM — SOMMAIRE D'ABORD, HH:MM, dédupliqué,
+    avec actions recommandées. Garantit une démo hors ligne."""
+    L = ["# Rapport de situation — Festival", ""]
+
+    # 1) Synthèse en tête (ce que l'opérateur lit en premier)
+    n_inc = len(episodes)
+    n_conf = sum(1 for ep in episodes if ep["confidence"] == "confirmé")
+    worst = max(episodes, key=lambda ep: ep["density"], default=None)
+    L.append("## Synthèse")
+    s1 = (f"- **{n_inc} épisode(s) d'incident** détecté(s) — {n_conf} confirmé(s), "
+          f"{n_inc - n_conf} à vérifier")
+    if worst:
+        s1 += (f" ; pic de tension en zone **{worst['zone']}** vers "
+               f"**{C.step_to_hhmm(worst['start_step'])}**")
+    L.append(s1 + ".")
+    L.append(f"- **{reallocs} ré-allocations** d'équipes déclenchées sur la journée.")
+    L.append(f"- Flot caméra : **{counts['incident_alerts']} affirmations d'incident** "
+             f"+ {counts['watches']} veilles densité (basse priorité), sur "
+             f"{counts['total']} alertes brutes.")
+    if comparison:
+        a, s = comparison["avec"], comparison["sans"]
+        saved = s["lost_revenue_eur"] - a["lost_revenue_eur"]
+        L.append(f"- Gestion prédictive vs réactive : arrivée médecin "
+                 f"{a['mean_response_min']['mean']} vs {s['mean_response_min']['mean']} min, "
+                 f"~{saved} € de ventes sauvées.")
+
+    # 2) Table d'incidents (≤ 15 lignes, heure horloge)
+    L += ["", "## Incidents (heure · zone · type · confiance · équipes méd.)"]
+    if episodes:
+        L += ["| Heure | Zone | Type | Confiance | Équipes méd. |",
+              "|---|---|---|---|---|"]
+        for ep in episodes[:15]:
+            hhmm = C.step_to_hhmm(ep["start_step"])
+            if ep["end_step"] != ep["start_step"]:
+                hhmm += f"–{C.step_to_hhmm(ep['end_step'])}"
+            types = ", ".join(TYPE_FR.get(t, t) for t in ep["types"])
+            L.append(f"| {hhmm} | {ep['zone']} | {types} | {ep['confidence']} "
+                     f"| {ep['med']} |")
+        if len(episodes) > 15:
+            L.append(f"| … | | | | +{len(episodes) - 15} épisode(s) |")
     else:
-        lines.append("Aucune alerte sur la période.")
-    lines += ["", "## 🔧 Activité du système",
-              f"- {reallocs} ré-allocations de ressources effectuées "
-              f"(périodiques + événementielles)."]
+        L.append("Aucun incident caméra confirmé sur la période.")
+
+    # 3) Actions recommandées (prescriptif)
+    L += ["", "## Actions recommandées"]
+    L += [f"- {act}" for act in actions]
+
+    # 4) Détail système / scénarios / impact (en fin, pour qui veut creuser)
+    L += ["", "## Activité du système",
+          f"- {reallocs} ré-allocations (périodiques + prévision + événement)."]
     if scenarios:
-        lines += ["", "## 🧪 Évaluation de scénarios"]
+        L += ["", "## Évaluation de scénarios"]
         for name, k in scenarios.items():
-            lines.append(
-                f"- **{name}** : temps de réponse moyen "
-                f"{k['mean_response_min']} min, pire p95 {k['worst_p95_min']} min, "
-                f"{k['total_uncovered']} incident(s) non couvert(s) "
-                f"sur {k['total_incidents']}.")
-    lines += _impact_section(comparison)
-    return "\n".join(lines)
+            L.append(f"- **{name}** : réponse moy. {k['mean_response_min']} min, "
+                     f"pire p95 {k['worst_p95_min']} min, {k['total_uncovered']} "
+                     f"non couvert(s)/{k['total_incidents']}.")
+    L += _impact_section(comparison)
+    return "\n".join(L)
 
 
 def pick_provider():
@@ -176,41 +275,43 @@ def summarize(control_log: list, scenarios: dict | None = None,
               comparison: dict | None = None) -> str:
     if comparison is None:
         comparison = _load_comparison()
-    # extraction des faits saillants du journal
-    alerts = []
-    for e in control_log:
-        for a in e["alerts"]:
-            med = {}
-            if e["allocation"] and isinstance(e["allocation"].get("medical"), dict):
-                raw = e["allocation"]["medical"]
-                # garde-fou : valeurs CP-SAT parfois non initialisées hors solution
-                total_medical = C.RESOURCES["medical"]
-                med = {z: v for z, v in raw.items()
-                       if isinstance(v, int) and 0 <= v <= total_medical}
-                alerts.append({
-                    "step": e["step"], "zone": a["zone"], "types": a["types"],
-                    "density": a["density"],
-                    "response": f"{med.get(a['zone'], '?')} équipe(s) médicale(s) "
-                                f"positionnée(s) en zone {a['zone']}",
-                })
+
+    # faits saillants : épisodes d'incident (dédupliqués) + comptes honnêtes
+    episodes = _episodes(control_log)
+    actions = _actions(control_log, episodes)
+    total = sum(len(e["alerts"]) for e in control_log)
+    watches = sum(1 for e in control_log for a in e["alerts"] if a.get("watch"))
+    counts = {"total": total, "watches": watches,
+              "incident_alerts": total - watches}
     n_realloc = sum(e["resolved"] for e in control_log)
+
+    # faits pour le LLM : épisodes en HH:MM (pas le dump brut d'alertes)
+    ep_facts = [{"heure": C.step_to_hhmm(ep["start_step"]),
+                 "fin": C.step_to_hhmm(ep["end_step"]), "zone": ep["zone"],
+                 "types": [TYPE_FR.get(t, t) for t in ep["types"]],
+                 "confiance": ep["confidence"], "equipes_medicales": ep["med"]}
+                for ep in episodes]
 
     provider, call = pick_provider()
     if provider == "template":
-        report = _template_fallback(alerts, n_realloc, scenarios, comparison)
+        report = _template_fallback(episodes, counts, n_realloc, actions,
+                                    scenarios, comparison)
     else:
         facts = json.dumps({
-            "alertes": alerts, "nb_reallocations": n_realloc,
+            "synthese": counts, "episodes_incident": ep_facts,
+            "actions_recommandees": actions, "nb_reallocations": n_realloc,
             "scenarios": scenarios,
             "impact_avec_vs_sans": comparison}, ensure_ascii=False, indent=1)
         try:
             report = call(
                 "Données du système pour la période écoulée :\n" + facts +
-                "\n\nRédige le rapport de situation.")
+                "\n\nRédige le rapport : SOMMAIRE d'abord (2-3 phrases), puis la "
+                "liste des incidents en HH:MM, puis les actions recommandées.")
         except Exception as exc:            # le LLM n'est jamais bloquant
             print(f"[narration] échec {provider} ({exc}) -> repli gabarit")
             provider = "template (repli)"
-            report = _template_fallback(alerts, n_realloc, scenarios, comparison)
+            report = _template_fallback(episodes, counts, n_realloc, actions,
+                                        scenarios, comparison)
 
     path = os.path.join(C.OUT, "situation_report.md")
     with open(path, "w") as f:

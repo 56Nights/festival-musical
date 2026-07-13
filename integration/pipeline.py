@@ -63,6 +63,18 @@ def _simulate_motion(frame_np: np.ndarray, density: float,
     return (moved.astype(np.float32) / 255).transpose(2, 0, 1)
 
 
+def _alloc_moves(prev, new):
+    """Nombre total de mouvements d'équipe entre deux allocations (somme des
+    |Δ| par ressource/zone, /2 car un départ = une arrivée). Sert à l'hystérésis."""
+    if prev is None or new is None:
+        return 10 ** 9
+    total = 0
+    for res in new:
+        for z in new[res]:
+            total += abs(new[res][z] - prev.get(res, {}).get(z, 0))
+    return total // 2
+
+
 def _window(start_step, n_steps):
     if start_step is None:
         start_step = C.TOTAL_STEPS - C.STEPS_PER_DAY
@@ -126,6 +138,7 @@ def run_control_loop(start_step: int = None, n_steps: int = None,
 
     log = []
     prev_alloc = None
+    n_fp_suppressed = [0]        # faux positifs fallen filtrés par le gate (mutable)
 
     for step in range(start_step, min(start_step + n_steps, C.TOTAL_STEPS)):
         entry = {"step": step, "alerts": [], "resolved": False}
@@ -133,7 +146,7 @@ def run_control_loop(start_step: int = None, n_steps: int = None,
         # ---- 1. prévision par zone (TimesFM zéro-shot) ----
         forecasts = {}
         for z in C.ZONES:
-            pred = forecaster.forecast(series[z][:step])
+            pred = forecaster.forecast(series[z][:step], at_step=step)
             forecasts[z] = float(np.max(pred))
         entry["forecast_peak"] = {z: round(v, 3) for z, v in forecasts.items()}
 
@@ -157,7 +170,7 @@ def run_control_loop(start_step: int = None, n_steps: int = None,
                     fallen="fallen_person" in inc or is_stampede_gt,
                     obj="suspicious_object" in inc)
 
-                # frame précédente simulée avec mouvement
+                # frame de ce pas APRÈS mouvement (déplacement intra-pas simulé)
                 moved_np = _simulate_motion(frame_np, real_density,
                                             is_stampede_gt)
 
@@ -165,35 +178,59 @@ def run_control_loop(start_step: int = None, n_steps: int = None,
                 frame_t = torch.tensor(frame_np).unsqueeze(0)
                 out = cnn(frame_t)
                 cnn_density  = float(out["density"].item())
-                cnn_fallen   = torch.sigmoid(out["fallen"]).item() > 0.5
-                cnn_object   = torch.sigmoid(out["object"]).item() > 0.5
+                cnn_fallen   = torch.sigmoid(out["fallen"]).item() > C.CNN_FALLEN_THRESHOLD
+                cnn_object   = torch.sigmoid(out["object"]).item() > C.CNN_OBJECT_THRESHOLD
 
                 # --- flux optique + fusion ---
+                # on mesure le mouvement INTRA-pas (frame de base -> frame déplacée) :
+                # calme = micro-jitter (pas d'alerte), bousculade = fuite cohérente.
+                # Comparer des pas successifs (frames générées indépendamment)
+                # produirait un flux parasite -> faux positifs.
                 flow_result = stampede_detector.analyze(
-                    z, moved_np, cnn_density, cnn_fallen)
+                    z, moved_np, cnn_density, cnn_fallen, prev_frame=frame_np)
 
                 # construction des kinds d'alerte
                 kinds = []
-                if cnn_fallen:
+                fallback_surge = False
+                # GATE DE PLAUSIBILITÉ : une « personne au sol » dans une zone
+                # quasi vide est physiquement improbable -> on la supprime (c'est
+                # la principale source de faux positifs du CNN).
+                if cnn_fallen and cnn_density >= C.FALLEN_MIN_DENSITY:
                     kinds.append("fallen_person")
+                elif cnn_fallen:
+                    n_fp_suppressed[0] += 1        # faux positif filtré (compteur)
                 if cnn_object:
                     kinds.append("suspicious_object")
                 if flow_result["stampede_alert"]:
-                    kinds.append("crowd_surge")
+                    kinds.append("crowd_surge")   # corroboré par la fusion 2/3
                 elif cnn_density > C.DENSITY_ALERT_THRESHOLD:
-                    kinds.append("crowd_surge")   # fallback density seule
+                    kinds.append("crowd_surge")   # fallback densité seule
+                    fallback_surge = True
 
                 if kinds:
-                    emergencies[z] = kinds
+                    active = flow_result["active_signals"]
+                    confirmed = active >= C.CORROBORATION_MIN_SIGNALS
+                    # VEILLE DENSITÉ : un surge issu du seul seuil de densité, non
+                    # corroboré et sans autre type, n'est PAS une affirmation
+                    # d'incident (« il y a une bousculade ») mais une veille (« zone
+                    # dense, pré-positionner »). Elle informe la couverture via la
+                    # prévision mais ne déclenche pas le triage d'urgence CSP et
+                    # n'entre pas dans la précision/rappel d'INCIDENTS.
+                    is_watch = (fallback_surge and not confirmed
+                                and kinds == ["crowd_surge"])
+                    if not is_watch:
+                        emergencies[z] = kinds
                     entry["alerts"].append({
                         "zone": z, "types": kinds,
                         "density": round(cnn_density, 2),
+                        "confidence": "confirmé" if confirmed else "à vérifier",
+                        "watch": is_watch,
                         "flow": {
                             "magnitude": flow_result["flow"]["mean_magnitude"]
                                          if flow_result["flow"] else None,
                             "coherence": flow_result["flow"]["coherence"]
                                          if flow_result["flow"] else None,
-                            "active_signals": flow_result["active_signals"],
+                            "active_signals": active,
                         }
                     })
 
@@ -205,7 +242,13 @@ def run_control_loop(start_step: int = None, n_steps: int = None,
             new_alloc, status = solve_allocation(forecasts, emergencies,
                                                  prev_alloc)
             if new_alloc is not None:
-                prev_alloc = new_alloc
+                # HYSTÉRÉSIS : hors urgence, on ignore les changements marginaux
+                # (bruit de prévision) pour ne pas déplacer les équipes pour rien.
+                moves = _alloc_moves(prev_alloc, new_alloc)
+                if (emergencies or prev_alloc is None
+                        or moves >= C.ALLOC_HYSTERESIS_MOVES):
+                    prev_alloc = new_alloc
+                # sinon : on conserve prev_alloc (changement jugé non significatif)
             else:
                 print(f"[CSP] step {step} : {status}, "
                       f"allocation précédente conservée")
@@ -219,21 +262,91 @@ def run_control_loop(start_step: int = None, n_steps: int = None,
 
         log.append(entry)
 
+    metrics = alert_quality(log, n_fp_suppressed[0])
     with open(os.path.join(C.OUT, "control_log.json"), "w") as f:
         json.dump(log, f, indent=1)
+    with open(os.path.join(C.OUT, "alert_metrics.json"), "w") as f:
+        json.dump(metrics, f, indent=1)
     return log
+
+
+# types réellement détectables par la CAMÉRA (les bagarres sont vues par la
+# sécurité, pas le CNN -> hors du calcul de précision/rappel caméra).
+CAMERA_TYPES = {"fallen_person", "suspicious_object", "crowd_surge"}
+
+
+def alert_quality(log, n_fp_suppressed=0, tol_steps=1):
+    """Précision / rappel du détecteur caméra contre la vérité terrain.
+
+    On distingue les AFFIRMATIONS D'INCIDENT (alertes non-veille) des VEILLES
+    densité (pré-positionnement, pas un incident). La précision/rappel porte sur
+    les affirmations d'incident ; les veilles sont comptées à part. On rapporte
+    aussi les faux positifs déjà SUPPRIMÉS par le gate de plausibilité — métrique
+    honnête, pas seulement l'exactitude in-distribution.
+    """
+    truth = set()
+    for e in log:
+        for t in e.get("truth_incidents", []):
+            if t["type"] in CAMERA_TYPES:
+                truth.add((e["step"], t["zone"], t["type"]))
+
+    def matches(step, zone, typ):
+        return any((step + d, zone, typ) in truth
+                   for d in range(-tol_steps, tol_steps + 1))
+
+    tp = fp = n_incident_alerts = n_watch = 0
+    for e in log:
+        for a in e["alerts"]:
+            if a.get("watch"):
+                n_watch += 1
+                continue
+            for typ in a["types"]:
+                if typ not in CAMERA_TYPES:
+                    continue
+                n_incident_alerts += 1
+                if matches(e["step"], a["zone"], typ):
+                    tp += 1
+                else:
+                    fp += 1
+    matched_truth = sum(1 for (st, z, ty) in truth
+                        if any(any(ty in a["types"] and a["zone"] == z
+                                   and not a.get("watch")
+                                   for a in e["alerts"])
+                               for e in log if abs(e["step"] - st) <= tol_steps))
+    n_truth = len(truth)
+    precision = tp / max(tp + fp, 1)
+    recall = matched_truth / max(n_truth, 1)
+    return {
+        "n_incident_alerts": n_incident_alerts,
+        "n_density_watches": n_watch,
+        "n_truth_camera": n_truth,
+        "true_positives": tp,
+        "false_positives": fp,
+        "fp_suppressed_by_gate": n_fp_suppressed,
+        "precision": round(precision, 3),
+        "recall": round(recall, 3),
+        "incident_alert_to_truth_ratio": round(n_incident_alerts / max(n_truth, 1), 2),
+    }
 
 
 if __name__ == "__main__":
     log = run_control_loop()
     n_alerts   = sum(len(e["alerts"]) for e in log)
     n_resolves = sum(e["resolved"] for e in log)
+    m = alert_quality(log)
     print(f"{len(log)} pas simulés | {n_alerts} alertes | "
           f"{n_resolves} ré-allocations")
+    print(f"Qualité caméra : précision {m['precision']:.0%}  rappel {m['recall']:.0%} "
+          f"| {m['n_incident_alerts']} affirmations d'incident pour "
+          f"{m['n_truth_camera']} réels (ratio {m['incident_alert_to_truth_ratio']}:1), "
+          f"{m['false_positives']} faux positifs | "
+          f"{m['n_density_watches']} veilles densité | "
+          f"{m['fp_suppressed_by_gate']} FP supprimés par le gate")
     for e in log:
         if e["alerts"]:
             for a in e["alerts"]:
                 flow = a.get("flow", {})
                 print(f"  step {e['step']} {a['zone']:12s} "
+                      f"[{a.get('confidence','?'):10s}] "
                       f"signals={flow.get('active_signals','?')}/3 "
                       f"-> {a['types']}")

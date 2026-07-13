@@ -53,8 +53,13 @@ def _arrival_weights(kind: str, S: int) -> np.ndarray:
         m = _step_minutes(s)
         if kind == "early":                       # décroissance dès l'ouverture
             w[s] = np.exp(-s / 6.0)               # étalé sur toute la matinée
-        elif kind == "planner":                   # log-normale, mode ~13h45
-            mu, sig = np.log(235.0), 0.27
+        elif kind == "planner":                   # log-normale, mode ~15h20
+            # mode recalé sur l'après-midi (ancrage étude : gros de l'affluence
+            # 16h-18h). NB : la DEMANDE d'entrée pique 16h-18h, mais le GOULOT
+            # d'admission (GATE_CAP_STEP) étale les admissions effectives et fait
+            # gonfler la file — d'où une fraction ADMISE 16h-18h < demande brute.
+            # cf. asserts `frac_afternoon` / `frac_16_18` dans _summary.
+            mu, sig = np.log(320.0), 0.30
             w[s] = np.exp(-(np.log(m) - mu) ** 2 / (2 * sig ** 2)) / m
         elif kind == "headliner":                 # ~90..10 min avant la tête d'affiche
             center = C.HEADLINER_START_MIN - 45
@@ -317,9 +322,11 @@ def _summary(df, flow):
 
     peak = fl.onsite.max()
     peak_s = int(fl.onsite.idxmax())
-    # arrivées (intention) dans la fenêtre 16h-18h (pas 24..31) — ancrage étude
+    # arrivées dans la fenêtre 16h-18h (pas 24..31) et l'après-midi (>=14h, pas 16+)
+    # — ancrage étude : le gros du public arrive l'après-midi, pic 16h-18h.
     arr = fl.arrived.to_numpy()
     frac_16_18 = arr[24:32].sum() / max(arr.sum(), 1)
+    frac_afternoon = arr[16:].sum() / max(arr.sum(), 1)   # arrivées après 14h
     # T90 egress après la tête d'affiche
     hl_end = int(C.HEADLINER_END_MIN // C.STEP_MINUTES)
     post = fl.onsite.to_numpy()[hl_end:]
@@ -333,11 +340,20 @@ def _summary(df, flow):
         mm = int(10 * 60 + s * C.STEP_MINUTES)
         return f"{mm//60:02d}:{mm%60:02d}"
 
+    # intention testée (pas seulement imprimée) : le public arrive massivement
+    # l'après-midi, avec un pic sur la fenêtre 16h-18h.
+    assert frac_afternoon >= 0.55, \
+        f"arrivées après 14h = {frac_afternoon*100:.0f} % (<55 %, courbe trop tôt)"
+    assert frac_16_18 >= 0.10, \
+        f"admissions 16h-18h = {frac_16_18*100:.0f} % (<10 %, pic mal placé)"
+
     print("Modèle de population — contrôles OK (dernier jour)")
     print(f"  population au pic      : {peak:.0f} à {clk(peak_s)} "
           f"(cible {C.PEAK_POPULATION})")
-    print(f"  arrivées 16h-18h       : {frac_16_18*100:.0f} % (+ ruée "
-          f"pré-headliner ~20h ; ancrage étude ~50 %)")
+    print(f"  arrivées après 14h     : {frac_afternoon*100:.0f} % (public d'après-midi)")
+    print(f"  admissions 16h-18h     : {frac_16_18*100:.0f} % "
+          f"(demande pique 16h-18h mais le goulot d'entrée étale les admissions "
+          f"-> file ; + ruée pré-headliner)")
     print(f"  file d'attente max     : {fl.queue.max():.0f} pers.")
     print(f"  egress T90 après 22h30 : {t90:.0f} min")
     print(f"  population à minuit     : {fl.onsite.iloc[-1]:.0f} "

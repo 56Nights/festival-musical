@@ -53,14 +53,34 @@ class ZeroShotForecaster:
                   f"-> repli saisonnier-naïf")
 
     # ------------------------------------------------------------------
-    def forecast(self, history: np.ndarray) -> np.ndarray:
-        """history : série 1D (fraction de capacité). Retourne HORIZON pas."""
+    def forecast(self, history: np.ndarray, at_step: int = None) -> np.ndarray:
+        """history : série 1D (fraction de capacité). Retourne HORIZON pas.
+
+        at_step : pas courant (optionnel). Fourni -> amortissement dérivé du
+        PROGRAMME connu (le modèle univarié ignore la fin de la tête d'affiche
+        et surestime l'affluence post-concert ; on corrige avec la covariable
+        « egress » — hybride suggéré dans la limite du module)."""
         history = np.asarray(history, dtype=np.float32)[-self.context:]
         if self.model is not None:
             point, _ = self.model.forecast(
                 horizon=self.horizon, inputs=[history])
-            return np.clip(np.asarray(point[0], dtype=np.float32), 0, 1.2)
-        return self._seasonal_naive(history)
+            pred = np.clip(np.asarray(point[0], dtype=np.float32), 0, 1.2)
+        else:
+            pred = self._seasonal_naive(history)
+        if at_step is not None:
+            pred = self._schedule_damping(pred, at_step)
+        return pred
+
+    def _schedule_damping(self, pred: np.ndarray, at_step: int) -> np.ndarray:
+        """Amortit les positions d'horizon qui tombent APRÈS la fin de la tête
+        d'affiche (egress) : décroissance douce (les gens partent), bornée."""
+        out = np.asarray(pred, dtype=np.float32).copy()
+        for h in range(len(out)):
+            minute = ((at_step + h + 1) % C.STEPS_PER_DAY) * C.STEP_MINUTES
+            if minute > C.HEADLINER_END_MIN:
+                hours_after = (minute - C.HEADLINER_END_MIN) / 60.0
+                out[h] *= max(0.35, 1.0 - 0.5 * hours_after)
+        return out
 
     def _seasonal_naive(self, history: np.ndarray) -> np.ndarray:
         """Baseline : dernière valeur + tendance locale, bornée [0, 1.2].
@@ -83,13 +103,24 @@ if __name__ == "__main__":
     fc = ZeroShotForecaster()
     print(f"backend : {fc.backend}")
 
-    # mini-évaluation : MAE sur le dernier jour, zone par zone
-    maes = []
+    # mini-évaluation : MAE sur le dernier jour, TimesFM vs baseline saisonnière.
+    # On COMPARE explicitement au repli naïf : un « Concevoir » honnête montre que
+    # le modèle de fondation bat (ou non) la baseline triviale sur CES données.
+    maes_model, maes_naive = [], []
     for z in C.ZONES:
         s = (df[df.zone == z].sort_values("step").attendance
              / C.ZONE_CAPACITY[z]).to_numpy()
         t0 = C.TOTAL_STEPS - C.STEPS_PER_DAY
         for t in range(t0, C.TOTAL_STEPS - C.HORIZON, 4):
-            pred = fc.forecast(s[:t])
-            maes.append(np.abs(pred - s[t:t + C.HORIZON]).mean())
-    print(f"MAE dernier jour : {np.mean(maes):.4f} (fraction de capacité)")
+            truth = s[t:t + C.HORIZON]
+            maes_model.append(np.abs(fc.forecast(s[:t]) - truth).mean())
+            maes_naive.append(np.abs(fc._seasonal_naive(
+                np.asarray(s[:t], dtype=np.float32)[-fc.context:]) - truth).mean())
+    m_model, m_naive = float(np.mean(maes_model)), float(np.mean(maes_naive))
+    print(f"MAE dernier jour — {fc.backend:28s} : {m_model:.4f} (frac. capacité)")
+    print(f"MAE dernier jour — baseline saisonnière-naïve : {m_naive:.4f}")
+    if fc.model is not None:
+        verdict = ("TimesFM BAT la baseline" if m_model < m_naive - 1e-4 else
+                   "TimesFM ≈ baseline (pas d'avantage net sur ces données — "
+                   "limite honnête à mentionner)")
+        print(f"-> {verdict}  (écart {m_naive - m_model:+.4f})")

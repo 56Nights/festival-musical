@@ -36,7 +36,17 @@ from simulation import geometry as G
 from simulation.mas import travel_time
 from allocation.dynamic_csp import SEVERITY
 
-rng = np.random.default_rng(2027)
+REPLAY_SEED = 2027
+rng = np.random.default_rng(REPLAY_SEED)
+
+
+def _reseed():
+    """Ré-initialise le RNG module au début de CHAQUE build -> deux builds
+    consécutifs produisent EXACTEMENT le même replay (nombre d'incidents inclus).
+    Sans cela, le RNG module partagé faisait varier le rendu d'un build à l'autre
+    (17 puis 18 incidents) — la « source unique de vérité » doit être reproductible."""
+    global rng
+    rng = np.random.default_rng(REPLAY_SEED)
 
 RES_TYPES = ["medical", "security", "logistics"]
 RES_IDX = {r: i for i, r in enumerate(RES_TYPES)}
@@ -1124,6 +1134,7 @@ def _load():
 
 def build_replay(out_path=None):
     out_path = out_path or C.REPLAY_JSON
+    _reseed()                     # build reproductible (même incidents à chaque fois)
     df, flow, log = _load()
     engine = ReplayEngine(df, log, flow)
     frames = engine.run()
@@ -1145,6 +1156,7 @@ def build_replay(out_path=None):
 # Auto-vérification
 # ---------------------------------------------------------------------------
 def _self_check():
+    _reseed()
     df, flow, log = _load()
     engine = ReplayEngine(df, log, flow)
     frames = engine.run()
@@ -1164,7 +1176,9 @@ def _self_check():
         expect = engine._onsite(e["step"]) / scale
         if expect > 5:
             worst = max(worst, abs(active - expect) / expect)
-    assert worst < 0.30, f"conservation foule violée (écart {worst*100:.0f} %)"
+    # borne resserrée (l'écart observé est ~15 % ; on laisse une marge à 20 %) —
+    # le compteur à l'écran ne peut pas trop dériver des données sous-jacentes.
+    assert worst < 0.20, f"conservation foule violée (écart {worst*100:.0f} %)"
 
     # (c) progression « se remplit puis se vide » : le site est léger à
     #     l'ouverture et à la fermeture, le pic est au milieu de la journée,

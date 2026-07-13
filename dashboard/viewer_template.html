@@ -9,21 +9,26 @@
     --bg:#f4f3f0; --surface:#fcfcfb; --surface-2:#eceae5; --line:#dcdad3;
     --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#87857e;
     --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --critical:#d03b3b;
-    --med:#d03b3b; --sec:#2a78d6; --log:#eda100;
+    /* COULEURS DE RÔLE (équipes) — volontairement DISJOINTES des couleurs de
+       DANGER (rouge) et des couleurs de ZONE (bleu MainStage, jaune FoodCourt) :
+       une croix médicale rouge disparaissait dans une zone rouge, un triangle
+       sécurité bleu se confondait avec la foule MainStage. */
+    --med:#0fb5a6; --sec:#334155; --log:#a16207;
+    --fight:#c026d3;                 /* bagarre : danger distinct du rôle sécurité */
     --accent:#2a78d6;
   }
   :root[data-theme="dark"]{
     --bg:#141413; --surface:#1a1a19; --surface-2:#232320; --line:#33332e;
     --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8b897f;
     --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --critical:#e05555;
-    --med:#e05555; --sec:#3987e5; --log:#c98500;
+    --med:#2fd0c0; --sec:#94a3b8; --log:#d4a72c; --fight:#e05ff0;
     --accent:#3987e5;
   }
   @media (prefers-color-scheme:dark){
     :root[data-theme="auto"]{
       --bg:#141413; --surface:#1a1a19; --surface-2:#232320; --line:#33332e;
       --ink:#ffffff; --ink-2:#c3c2b7; --ink-3:#8b897f;
-      --med:#e05555; --sec:#3987e5; --log:#c98500; --accent:#3987e5;
+      --med:#2fd0c0; --sec:#94a3b8; --log:#d4a72c; --fight:#e05ff0; --accent:#3987e5;
     }
   }
   *{box-sizing:border-box}
@@ -279,8 +284,10 @@
   .sum-kpi>summary:hover .k{color:var(--accent)}
   .sum-kpi .k{font-weight:600; color:var(--ink); font-size:13px}
   .sum-kpi .v{font-variant-numeric:tabular-nums; font-weight:700; font-size:13px; text-align:right;
-    display:flex; gap:5px; justify-content:flex-end; align-items:baseline; flex-wrap:wrap}
-  .sum-kpi .v.a{color:var(--good)} .sum-kpi .v.s{color:var(--critical)}
+    display:flex; gap:5px; justify-content:flex-end; align-items:baseline; flex-wrap:nowrap}
+  /* on colore le GAGNANT (prédictif) en vert, mais la valeur « sans » est en
+     ENCRE NEUTRE — le tout-rouge se lisait comme du marketing, pas de la mesure. */
+  .sum-kpi .v.a{color:var(--good)} .sum-kpi .v.s{color:var(--ink-2)}
   .sum-kpi .best{font-size:8px; font-weight:700; text-transform:uppercase; letter-spacing:.3px;
     color:var(--good); border:1px solid var(--good); border-radius:4px; padding:0 3px; white-space:nowrap}
   .sum-kpi .chev{color:var(--ink-3); transition:transform .2s; font-size:15px; text-align:center; line-height:1}
@@ -305,6 +312,7 @@
     <span class="io"><span class="in" id="pop-in">▲0</span> <span class="out" id="pop-out">▼0</span> /min</span>
   </div>
   <div class="clock"><span id="clock">--:--</span><span class="day" id="daylab"></span></div>
+  <button class="iconbtn" id="help-btn" title="Aide — raccourcis clavier &amp; repères (rouvre à tout moment)">?</button>
   <button class="iconbtn" id="summary-btn" title="Bilan de la journée">Σ</button>
   <button class="iconbtn" id="demo" title="Mode démo / projecteur (masque le panneau)">▣</button>
   <button class="iconbtn" id="theme" title="Thème clair / sombre">◐</button>
@@ -343,7 +351,7 @@
       <div class="kpi open"><div class="n" id="k-open">0</div><div class="l">ouverts</div></div>
       <div class="kpi res"><div class="n" id="k-res">0</div><div class="l">résolus</div></div>
       <div class="kpi unc"><div class="n" id="k-unc">0</div><div class="l">non couv.</div></div>
-      <div class="kpi rt"><div class="n" id="k-rt">0</div><div class="l">rép. moy.</div></div>
+      <div class="kpi rt" title="Temps de TRAJET moyen des équipes jusqu'à l'incident (dépêche immédiate, hors délai de détection). Le Bilan de fin de journée montre l'« Arrivée médecin » détection INCLUSE (un peu plus long) — deux mesures distinctes, pas une contradiction."><div class="n" id="k-rt">0</div><div class="l">trajet moy.</div></div>
     </div>
     <div class="panel">
       <section>
@@ -746,6 +754,18 @@ function draw(){
     ctx.moveTo(TX(poly[0][0]),TY(poly[0][1]));
     for(let i=1;i<poly.length;i++) ctx.lineTo(TX(poly[i][0]),TY(poly[i][1]));
     ctx.closePath(); };
+  // ANCRE D'URGENCE : un seul « regarder ici d'abord ». À chaque instant on
+  // désigne la zone la plus critique (incident actif > surcapacité > densité) et
+  // on la marque d'une pastille « ① PRIORITÉ » — sans quoi 4 zones rouges pulsent
+  // à égalité sans hiérarchie visuelle.
+  let anchorZone=null, anchorScore=0;
+  const _incZones={}; for(const it of f0.inc){ const mm=INC_SPAWN[it[0]];
+    if(mm&&mm.zone){ const dt=frame-mm.f; if(dt>=0&&dt<220) _incZones[mm.zone]=true; } }
+  for(const z of ZONES){
+    const dz=lerp(f0.dens[z], f1.dens[z], a);
+    const sc=(_incZones[z]?1000:0)+(dz>1?300:0)+dz*100;
+    if(dz>THR && sc>anchorScore){ anchorScore=sc; anchorZone=z; }
+  }
   for(const z of ZONES){
     const d = lerp(f0.dens[z], f1.dens[z], a);
     const fp = (step.forecast_peak||{})[z]||0;    // pic prévu à T+2h
@@ -766,23 +786,62 @@ function draw(){
     ctx.strokeStyle = over ? `rgba(208,59,59,${.55+.45*pulse(280)})`
                            : (isDark()?'rgba(255,255,255,.22)':'rgba(0,0,0,.22)');
     trace(z); ctx.stroke();
+    // SURCAPACITÉ (d>100 %) : encodage EXPLICITE — le remplissage sature à 100 %,
+    // donc 110 % et 131 % seraient identiques sans ceci. Hachures diagonales +
+    // anneau ambré vif dont l'intensité croît avec le dépassement.
+    if(d>1.001){
+      const ov=Math.min(1,(d-1)/0.4);
+      ctx.save(); trace(z); ctx.clip();
+      const bb=zbbox(z);
+      let X0=TX(bb[0]),X1=TX(bb[2]),Y0=TY(bb[1]),Y1=TY(bb[3]);
+      if(X0>X1){const t=X0;X0=X1;X1=t;} if(Y0>Y1){const t=Y0;Y0=Y1;Y1=t;}
+      const HH=Y1-Y0;
+      ctx.strokeStyle=`rgba(255,214,110,${(isDark()?.16:.12)+.24*ov})`;
+      ctx.lineWidth=2*dpr;
+      for(let gx=X0-HH; gx<X1; gx+=10*dpr){
+        ctx.beginPath(); ctx.moveTo(gx,Y0); ctx.lineTo(gx+HH,Y1); ctx.stroke();
+      }
+      ctx.restore();
+      ctx.lineWidth=2*dpr; ctx.strokeStyle=`rgba(255,214,110,${.65+.3*pulse(240)})`;
+      trace(z); ctx.stroke();
+    }
     // flash blanc à l'apparition d'un incident
     if(flash[z]){ ctx.save(); ctx.lineWidth=4*dpr;
       ctx.strokeStyle=`rgba(255,255,255,${.85*flash[z]})`; trace(z); ctx.stroke(); ctx.restore(); }
-    // libellé : maintenant -> T+2h avec flèche de tendance
+    // libellé : PASTILLE de fond -> le texte n'est JAMAIS de la couleur du
+    // remplissage (fini le rouge-sur-rouge illisible à saturation).
     const c = H.zones[z].center;
-    ctx.fillStyle = isDark()?'rgba(255,255,255,.92)':'rgba(0,0,0,.82)';
-    ctx.font = `${Math.max(11,13*scale)*dpr}px -apple-system,sans-serif`;
-    ctx.textAlign='center';
-    ctx.fillText(z, TX(c[0]), TY(c[1])-5*dpr);
-    ctx.font = `${Math.max(10,11.5*scale)*dpr}px -apple-system,sans-serif`;
-    ctx.fillStyle = over?'#d03b3b':(isDark()?'rgba(255,255,255,.62)':'rgba(0,0,0,.55)');
-    let lbl = Math.round(d*100)+'%'+(d>1.0?' ⚠ surcap.':'');
+    const cx=TX(c[0]), cy=TY(c[1]);
+    const fz1=Math.max(11,13*scale)*dpr, fz2=Math.max(10,11.5*scale)*dpr;
+    const over100 = d>1.001;
+    let stat = Math.round(d*100)+'%'+(over100?' ⚠':'');
     if(layers.prevision && fp>0.35){
-      const arrow = fp>d+0.04?' ↗':fp<d-0.04?' ↘':' →';
-      lbl += `  ›  ${Math.round(fp*100)}%${arrow}`;
+      const arrow = fp>d+0.04?'↗':fp<d-0.04?'↘':'→';
+      stat += `  ›  ${Math.round(fp*100)}% ${arrow}`;
     }
-    ctx.fillText(lbl, TX(c[0]), TY(c[1])+14*dpr);
+    ctx.textAlign='center';
+    ctx.font=`600 ${fz1}px -apple-system,sans-serif`; const w1=ctx.measureText(z).width;
+    ctx.font=`${fz2}px -apple-system,sans-serif`; const w2=ctx.measureText(stat).width;
+    const pw=Math.max(w1,w2)+16*dpr, pht=fz1+fz2+14*dpr;
+    ctx.fillStyle = isDark()?'rgba(8,8,8,.58)':'rgba(255,255,255,.78)';
+    rrect(ctx, cx-pw/2, cy-fz1-8*dpr, pw, pht, 7*dpr); ctx.fill();
+    ctx.fillStyle = isDark()?'rgba(255,255,255,.95)':'rgba(0,0,0,.86)';
+    ctx.font=`600 ${fz1}px -apple-system,sans-serif`;
+    ctx.fillText(z, cx, cy-5*dpr);
+    ctx.font=`${fz2}px -apple-system,sans-serif`;
+    // surcapacité -> ambre vif (lisible sur pastille neutre) ; sinon encre atténuée
+    ctx.fillStyle = over100 ? (isDark()?'#ffd66e':'#b06a00')
+                   : (isDark()?'rgba(255,255,255,.66)':'rgba(0,0,0,.58)');
+    ctx.fillText(stat, cx, cy+13*dpr);
+    // pastille d'ANCRE (une seule zone) : « ① PRIORITÉ » au-dessus du libellé
+    if(z===anchorZone){
+      const t='① PRIORITÉ', fz3=Math.max(9,10*scale)*dpr;
+      ctx.font=`700 ${fz3}px -apple-system,sans-serif`;
+      const tw=ctx.measureText(t).width, py=cy-fz1-8*dpr;
+      ctx.fillStyle=`rgba(208,59,59,${.82+.18*pulse(260)})`;
+      rrect(ctx, cx-tw/2-7*dpr, py-fz3-9*dpr, tw+14*dpr, fz3+8*dpr, 5*dpr); ctx.fill();
+      ctx.fillStyle='#fff'; ctx.fillText(t, cx, py-4*dpr);
+    }
     // badge « en concert » — posé juste au-dessus du toit de la scène
     const con=activeConcert(Math.round(frame));
     if(con && con.zone===z){ const S=stageGeom(z);
@@ -990,7 +1049,7 @@ function drawIncident(x,y,it,dpr){
     return;
   }
   const pcol = type===0?cssVar('--critical'):type===1?cssVar('--serious')
-             :type===3?cssVar('--sec'):cssVar('--warn');
+             :type===3?cssVar('--fight'):cssVar('--warn');
   // pending pulse plus vif à mesure que l'abandon approche
   const speed = st===0 ? 240-1.6*aux : 360;
   const p = pulse(Math.max(90,speed));
@@ -1135,7 +1194,7 @@ function fmtChrono(mins){ const s=Math.max(0,Math.round(mins*60));
 function monShort(t){return {fallen_person:'chute', crowd_surge:'mvt foule',
   suspicious_object:'objet', fight:'bagarre'}[t]||t;}
 const MON_ICON = {0:c=>ICON.fallen(c), 1:c=>ICON.burst(c), 2:c=>ICON.obj(c), 3:c=>ICON.fight(c)};
-const MON_COL  = {0:'--critical', 1:'--serious', 2:'--warn', 3:'--sec'};
+const MON_COL  = {0:'--critical', 1:'--serious', 2:'--warn', 3:'--fight'};
 function renderMonitor(){
   const [f0]=curFrames();
   const M=frame;                              // minute-de-journée (1 frame = 1 min)
@@ -1168,13 +1227,23 @@ function renderMonitor(){
   for(const al of (H.steps[si].alerts||[]))
     rows.push({kind:'alert', zone:al.zone, name:al.types.map(monShort).join(', '),
                dens:al.density, prio:-1});
-  // C. lignes fantômes : blessés induits ÉVITÉS (n'existent que dans le scénario sans)
-  if(CMP) for(const g of (CMP.sans.rep_timeline||[])){
-    if(!g.induced) continue;
-    const end=(g.resolved!=null?g.resolved:g.spawn+25)+6;
-    if(M>=g.spawn && M<end)
-      rows.push({kind:'ghost', zone:g.zone, name:monShort(g.type)+' induit',
-                 prio:4, spawnF:g.spawn});
+  // C. lignes fantômes : blessés induits ÉVITÉS (n'existent que dans le scénario
+  // sans). On les REGROUPE par zone/type pour ne pas afficher 4 lignes identiques
+  // (qui se lisaient comme un bug) -> une seule ligne « ×N évités ».
+  if(CMP){
+    const gmap={};
+    for(const g of (CMP.sans.rep_timeline||[])){
+      if(!g.induced) continue;
+      const end=(g.resolved!=null?g.resolved:g.spawn+25)+6;
+      if(M>=g.spawn && M<end){
+        const k=g.zone+'|'+g.type;
+        (gmap[k]=gmap[k]||{zone:g.zone, type:g.type, n:0, spawnF:g.spawn}).n++;
+      }
+    }
+    for(const k in gmap){ const g=gmap[k];
+      rows.push({kind:'ghost', zone:g.zone,
+                 name:monShort(g.type)+' induit'+(g.n>1?' ×'+g.n:''),
+                 prio:4, spawnF:g.spawnF}); }
   }
   rows.sort((a,b)=> a.prio-b.prio || (b.spawnF||0)-(a.spawnF||0));
   const active=rows.filter(r=>r.kind==='inc'&&r.cls!=='done').length;
@@ -1244,7 +1313,19 @@ function buildSummary(){
     `<p class="sub">La même journée rejouée avec les <b>mêmes incidents</b>, en gestion `+
       `<b>prédictive</b> (prévision + détection auto + ré-allocation) vs <b>réactive</b> (sans). `+
       `Chaque ligne est <b>dépliable</b> pour le détail et la source. Moyennes sur ${runs} rejeux.</p>`+
-    `<div class="sum-hero"><div class="big">${eur(saved)} € de ventes sauvées</div>`+
+    `<p class="sub" style="opacity:.75;font-size:12px">Note : l'« Arrivée médecin » ci-dessous inclut le `+
+      `<b>délai de détection</b> (≈ +1 min) ; la tuile « trajet moy. » de la carte ne compte que le `+
+      `<b>trajet</b> des équipes (dépêche immédiate). Deux mesures distinctes du même système.</p>`+
+    // HÉRO SÉCURITÉ D'ABORD (public sécurité) — le € vient en second, en « kicker »
+    `<div class="sum-hero"><div class="big">${Math.round(av.mean_outcome*100)} % `+
+      `d'issue favorable des victimes <span style="font-size:15px;font-weight:600">`+
+      `(vs ${Math.round(sv.mean_outcome*100)} % sans)</span></div>`+
+      `<div class="cap">Prise en charge plus précoce : ${Math.round(sv.pct_mce_runs)} % des jours `+
+      `finissaient en catastrophe (« mass casualty ») sans le système, contre `+
+      `${Math.round(av.pct_mce_runs)} % avec — et ~${nb(sv.mean_induced-av.mean_induced)} `+
+      `blessés induits évités par jour.</div></div>`+
+    `<div class="sum-hero" style="margin-top:6px"><div class="big">${eur(saved)} € de ventes sauvées`+
+      `<span style="font-size:15px;font-weight:600"> (kicker business)</span></div>`+
       `<div class="cap">≈ ${eur(kept)} clients retenus au FoodCourt, qui seraient repartis sans `+
       `commander faute d'un service assez rapide au pic.</div></div>`+
     `<div class="cols"><span></span><span class="a">prédictif</span><span class="s">sans</span></div>`+
@@ -1385,12 +1466,18 @@ function buildLegend(){
     `<div class="grp"><span class="lbl">Incidents</span>`+
       it(ICON.fallen(cssVar('--critical')), 'chute')+
       it(ICON.burst(cssVar('--serious')), 'mvt foule')+
-      it(ICON.fight(cssVar('--sec')), 'bagarre')+
+      it(ICON.fight(cssVar('--fight')), 'bagarre')+
       it(ICON.obj(cssVar('--warn')), 'objet')+
       it(ICON.disc(cssVar('--good'),'✓'), 'résolu')+
     `</div>`+
+    `<div class="grp"><span class="lbl">Densité zone</span>`+
+      `<span class="it" title="Le libellé d'une zone lit : densité réelle maintenant › densité prévue dans 2 h, avec ↗ hausse / ↘ baisse / → stable.">`+
+        `réel&nbsp;<b>›</b>&nbsp;prévu T+2h&nbsp;<b>↗↘→</b></span>`+
+      `<span class="it" title="Le remplissage sature à 100 %. Au-delà, des hachures et un anneau ambré signalent la surcapacité (110 %, 131 %…).">`+
+        `hachures&nbsp;=&nbsp;&gt;100 % surcapacité ⚠</span>`+
+    `</div>`+
     `<div class="grp"><span class="lbl">Prévision</span>`+
-      it(ICON.dashline(cssVar('--warn')), 'pic prévu TimesFM (T+2h)')+
+      it(ICON.dashline(cssVar('--warn')), 'pic prévu (prévision TimesFM, T+2h)')+
     `</div>`;
 }
 
@@ -1525,6 +1612,9 @@ demoBtn.onclick=()=>setDemo(!document.body.classList.contains('demo'));
 // ---------- overlay d'accueil ----------
 const welcome=document.getElementById('welcome');
 document.getElementById('welcome-ok').onclick=()=>welcome.classList.add('hidden');
+// Aide PERSISTANTE : le bouton « ? » rouvre l'accueil/les raccourcis à tout
+// moment (l'onboarding one-shot était irrécupérable une fois fermé).
+document.getElementById('help-btn').onclick=()=>welcome.classList.remove('hidden');
 welcome.addEventListener('click',e=>{ if(e.target===welcome) welcome.classList.add('hidden'); });
 
 // ---------- bilan de fin (bouton Σ + clic hors-carte pour fermer) ----------

@@ -146,14 +146,15 @@ sur site), d'après des observations réelles de festivals (cf. sources) :
 | Ingrédient réel | Modélisation |
 |---|---|
 | Types de public (étude Bluetooth ~130 000 festivaliers) | 4 types : campeurs (présents jour+nuit), lève-tôt, gros pic d'après-midi, public tête-d'affiche |
-| ~50 % des visiteurs arrivent 16h-18h ; ruée pré-headliner | arrivées = **processus de Poisson non-homogène** par type (log-normale mode ~16h30 + normale ~90 min avant la tête d'affiche) |
+| ~50 % des visiteurs arrivent 16h-18h ; ruée pré-headliner | **demande** d'arrivée = processus de Poisson non-homogène par type (log-normale planner mode ~15h20 + normale ~90 min avant la tête d'affiche). Le **goulot d'admission** étale les admissions effectives (la file absorbe le pic 16h-18h) : ~63 % du public arrive l'après-midi, pic de population ~18h |
 | File d'attente aux portes en fin d'après-midi | **goulot d'admission** (capacité/pas) → une file se forme quand le flux la dépasse |
 | Egress compressé après le concert (choix de départ individuel) | départs quasi nuls avant 20h, puis egress **borné par la capacité de sortie** (~45 min pour vider l'essentiel) |
 | « Les gens campent autour d'une scène » (faible mobilité) | choix de zone par **softmax du programme des concerts** avec forte **inertie** (seule une fraction re-décide par pas) → migrations en vagues, pas de téléportation |
 | Évitement des zones saturées | pénalité d'attractivité au-delà de 85 % de capacité → débordement réaliste |
 
-Résultat : le site **part vide**, se remplit progressivement, sature à la tête
-d'affiche, puis se vide ; **seuls les campeurs restent la nuit**. Le contrôle
+Résultat : le site **démarre avec les campeurs déjà présents** (~3 600 personnes
+à l'ouverture, qui dorment sur place), se remplit progressivement, sature à la
+tête d'affiche, puis se vide ; **seuls les campeurs restent la nuit**. Le contrôle
 `python data/generate_data.py` imprime et vérifie ces propriétés (conservation,
 pic, file, T90 d'egress, population résiduelle).
 
@@ -220,8 +221,21 @@ Repères : `f=30` (matin, site vide), `f=610` (ruée + file), `f=785` (egress).
 
 - **Prévision** : TimesFM zéro-shot (télécharge ~200 Mo au premier lancement) ;
   hors-ligne, repli saisonnier-naïf documenté
-- **CNN** : chute ≈ 99 % · objet ≈ 88–99 % · densité MAE ≈ 0,10 (données synthétiques)
-- **Boucle intégrée** : alertes CNN détectées → ré-allocations CSP déclenchées
+- **CNN** : chute ≈ 99 % · objet ≈ 88–99 % · densité MAE ≈ 0,10 — ce sont des
+  **exactitudes sur un split synthétique in-distribution** (prévalence ~30 %),
+  PAS la précision en exploitation. En rejouant la journée entière, la prévalence
+  réelle des chutes est quasi nulle, donc même une bonne spécificité produit
+  beaucoup de faux positifs : ~112 alertes caméra pour 15 incidents réels (7:1).
+  Le pipeline **filtre** désormais ces faux positifs (gate de plausibilité par
+  densité) et **rapporte précision/rappel**, pas seulement l'exactitude (cf.
+  `run_demo.py` et §Limites)
+- **Flux optique** : la métrique de cohérence (calculée sur les seuls pixels au
+  mouvement significatif) **passe désormais son auto-démo** — situation calme non
+  signalée, bousculade détectée (`python vision/optical_flow.py`). Le flux ajoute
+  un signal temporel corroborant aux alertes de bousculade (fusion 2/3)
+- **Boucle intégrée** : alertes CNN filtrées (gate de plausibilité + veilles
+  densité séparées) → précision/rappel rapportés honnêtement, ratio alertes:
+  incidents ramené de ~7:1 à ~2,5:1 ; ré-allocations CSP stables (hystérésis)
 - **MAS** : au pic (incidents concentrés sur MainStage), l'allocation CSP tient
   un p95 de ~29 min et ~0 incident non couvert, contre ~38 min et des dizaines
   de non-couverts pour une allocation uniforme naïve (20 runs Monte-Carlo)
@@ -278,10 +292,26 @@ Aucun modèle lourd n'est entraîné localement :
   carte et ne peuvent donc pas se contredire.
 - Le modèle de population est **agrégé par type** (comptes par pas), pas
   micro-agent individuel : il reproduit les courbes réelles (arrivées, file,
-  egress, campeurs) sans prétendre suivre chaque festivalier. La journée
-  entière étant désormais rejouée, le CNN produit davantage d'alertes (dont
-  quelques faux positifs à basse densité) — comportement réaliste d'un
-  détecteur imparfait, que le CSP absorbe sans jamais devenir infaisable.
+  egress, campeurs) sans prétendre suivre chaque festivalier.
+- **Dépassements de capacité de zone (assumés).** Certaines zones dépassent
+  transitoirement 100 % de leur capacité nominale au pic (SecondStage ~114 %,
+  FoodCourt ~114 %, Entrance ~200 % — transit/file par conception). L'évitement
+  des zones saturées (`CROWD_AVERSION`) est une pénalité **souple** : elle
+  modère mais n'interdit pas la suroccupation, car le public s'entasse
+  réellement devant une scène populaire (surdensité tête d'affiche, cf.
+  littérature crowd-crush). La vue simulation **encode explicitement** ces
+  dépassements (hachures + anneau ambré + libellé « ⚠ »), au lieu de les masquer
+  en saturant la couleur à 100 %.
+- **Précision du CNN en exploitation (limite majeure et assumée).** Sur la
+  journée rejouée, le détecteur brut émet ~112 alertes pour 15 incidents réels
+  (ratio 7:1) — c'est la conséquence normale d'un classifieur imparfait face à
+  une prévalence quasi nulle, pas une erreur de mesure. Deux garde-fous sont
+  désormais en place : (1) un **gate de plausibilité** supprime les alertes
+  physiquement improbables (« personne au sol » dans une zone à <15 % de densité),
+  (2) le pipeline **corrobore** les alertes (1 signal = « à vérifier », ≥2 signaux
+  = « confirmé ») et **publie précision/rappel**. Le « 99 % » du CNN reste une
+  exactitude in-distribution ; la précision opérationnelle, elle, est affichée
+  honnêtement plutôt que masquée dans le flot d'alertes.
 
 ## Correspondance avec les 6 compétences
 

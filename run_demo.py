@@ -111,8 +111,9 @@ print(f"  réponse    avec/sans : {_a['mean_response_min']['mean']} / "
       f"{_s['mean_response_min']['mean']} min "
       f"({_a['pct_within_target']:.0f}% vs {_s['pct_within_target']:.0f}% < "
       f"{C.RESPONSE_TARGET_MIN:.0f} min)")
+_retained = _s['lost_customers'] - _a['lost_customers']
 print(f"  CA FoodCourt sauvé   : ~{_s['lost_revenue_eur'] - _a['lost_revenue_eur']} € "
-      f"({_s['lost_customers']} clients retenus)")
+      f"({_retained} clients retenus ; {_s['lost_customers']} perdus sans le système)")
 
 print("\n" + "=" * 60)
 print("7/9  Vue simulation spatiale (jumeau numérique animé)")

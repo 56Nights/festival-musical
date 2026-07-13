@@ -16,6 +16,24 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 import config as C
+from simulation import geometry as G
+
+# palette de zone UNIFIÉE avec la vue simulation (source : geometry.ZONE_COLORS)
+# -> plus de « MainStage bleu sur la carte, violet ici ».
+ZCOL = {z: G.ZONE_COLORS[z]["light"] for z in C.ZONES}
+
+
+def _takeaway(fig, row, col, text):
+    """Annote un panneau d'une phrase de lecture (« à retenir »)."""
+    ref_x = "x domain" if (row, col) == (1, 1) else None
+    fig.add_annotation(
+        xref=f"x{_axis_idx(row, col)} domain", yref=f"y{_axis_idx(row, col)} domain",
+        x=0.5, y=1.14, showarrow=False, xanchor="center",
+        font=dict(size=11, color="#555"), text=text, row=row, col=col)
+
+
+def _axis_idx(row, col):
+    return {(1, 1): "", (1, 2): "2", (2, 1): "3", (2, 2): "4"}[(row, col)]
 
 
 def build(scenario_results: dict):
@@ -24,57 +42,67 @@ def build(scenario_results: dict):
         log = json.load(f)
 
     steps = [e["step"] for e in log]
+    clocks = [C.step_to_hhmm(s) for s in steps]   # axes en HH:MM (pas d'indices bruts)
     fig = make_subplots(
-        rows=2, cols=2,
+        rows=2, cols=2, vertical_spacing=0.16, horizontal_spacing=0.09,
         subplot_titles=(
-            "Affluence — dernier jour (réel vs pic prévu à 2h)",
+            "Affluence MainStage — réel vs pic prévu à 2h",
             "Densité par zone (fraction de capacité)",
-            "Équipes médicales allouées (CSP dynamique)",
+            "Équipes médicales allouées — carte de charge (CSP)",
             "Évaluation de scénarios (MAS, Monte-Carlo)"),
-        specs=[[{}, {}], [{}, {"type": "bar"}]])
+        specs=[[{}, {}], [{}, {"secondary_y": True}]])
 
-    # --- 1. réel vs prévu (MainStage) ---
-    real = df[(df.zone == "MainStage") & (df.step.isin(steps))]
-    fig.add_trace(go.Scatter(x=real.step, y=real.attendance / real.capacity,
-                             name="MainStage réel", line=dict(width=2)), 1, 1)
+    # --- 1. réel vs prévu (MainStage), axe horloge ---
+    real = df[(df.zone == "MainStage") & (df.step.isin(steps))].sort_values("step")
+    fig.add_trace(go.Scatter(x=clocks, y=real.attendance / real.capacity,
+                             name="MainStage réel",
+                             line=dict(width=2, color=ZCOL["MainStage"])), 1, 1)
     fig.add_trace(go.Scatter(
-        x=steps, y=[e["forecast_peak"]["MainStage"] for e in log],
-        name="pic prévu (T+2h)", line=dict(dash="dash")), 1, 1)
-    fig.add_hline(y=C.DENSITY_ALERT_THRESHOLD, line_dash="dot",
-                  line_color="red", row=1, col=1)
+        x=clocks, y=[e["forecast_peak"]["MainStage"] for e in log],
+        name="pic prévu (T+2h)",
+        line=dict(dash="dash", color=ZCOL["MainStage"])), 1, 1)
+    fig.add_hline(y=C.DENSITY_ALERT_THRESHOLD, line_dash="dot", line_color="red",
+                  annotation_text="seuil d'alerte 85 %", annotation_position="top left",
+                  annotation_font_color="red", row=1, col=1)
+    fig.update_yaxes(title_text="densité (frac. capacité)", row=1, col=1)
 
-    # --- 2. heatmap densité ---
+    # --- 2. heatmap densité (colourbar étiquetée) ---
     dens = np.array([[df[(df.zone == z) & (df.step == s)].attendance.iloc[0]
                       / C.ZONE_CAPACITY[z] for s in steps] for z in C.ZONES])
-    fig.add_trace(go.Heatmap(z=dens, y=C.ZONES, x=steps,
-                             colorscale="YlOrRd", showscale=False), 1, 2)
+    fig.add_trace(go.Heatmap(
+        z=dens, y=C.ZONES, x=clocks, colorscale="YlOrRd",
+        colorbar=dict(title="densité", len=0.42, y=0.79, thickness=12)), 1, 2)
 
-    # --- 3. allocation médicale dans le temps ---
-    for z in C.ZONES:
-        ys = [e["allocation"]["medical"][z] if e["allocation"] else None
-              for e in log]
-        fig.add_trace(go.Scatter(x=steps, y=ys, name=f"med {z}",
-                                 mode="lines+markers"), 2, 1)
-    # marqueurs d'alerte
-    for e in log:
-        if e["alerts"]:
-            fig.add_vline(x=e["step"], line_color="rgba(200,0,0,.35)",
-                          row=2, col=1)
+    # --- 3. allocation médicale : carte de charge zone × temps (ex-spaghetti) ---
+    med = np.array([[(e["allocation"]["medical"][z] if e["allocation"] else 0)
+                     for e in log] for z in C.ZONES])
+    fig.add_trace(go.Heatmap(
+        z=med, y=C.ZONES, x=clocks, colorscale="Blues", zmin=0,
+        colorbar=dict(title="équipes", len=0.42, y=0.21, thickness=12),
+        hovertemplate="%{y} — %{x}<br>%{z} équipe(s) médicale(s)<extra></extra>"), 2, 1)
 
-    # --- 4. comparaison scénarios ---
+    # --- 4. comparaison scénarios : minutes (axe gauche) vs comptes (axe droit) ---
     labels = list(scenario_results.keys())
     fig.add_trace(go.Bar(
         x=labels, y=[scenario_results[k]["mean_response_min"] for k in labels],
-        name="temps de réponse moyen (min)"), 2, 2)
+        name="réponse moy. (min)", marker_color="#2a78d6"), 2, 2, secondary_y=False)
     fig.add_trace(go.Bar(
         x=labels, y=[scenario_results[k]["total_uncovered"] for k in labels],
-        name="incidents non couverts"), 2, 2)
+        name="incidents non couverts", marker_color="#d03b3b"), 2, 2, secondary_y=True)
+    fig.update_yaxes(title_text="minutes", row=2, col=2, secondary_y=False)
+    fig.update_yaxes(title_text="incidents", row=2, col=2, secondary_y=True)
+
+    # takeaways (une phrase par panneau)
+    _takeaway(fig, 1, 1, "La prévision anticipe la montée vers la tête d'affiche.")
+    _takeaway(fig, 1, 2, "Plusieurs zones dépassent 85 % en soirée (rouge foncé).")
+    _takeaway(fig, 2, 1, "Le CSP concentre les équipes sur les zones chaudes du moment.")
+    _takeaway(fig, 2, 2, "Minutes (bleu, gauche) et non-couverts (rouge, droite) — échelles séparées.")
 
     fig.update_layout(
-        height=850, title_text="Festival Musical Intelligent — Dashboard système",
+        height=880, title_text="Festival Musical Intelligent — Dashboard système",
         legend=dict(orientation="h", y=-0.08), barmode="group")
     fig.add_annotation(
-        xref="paper", yref="paper", x=1, y=1.06, showarrow=False,
+        xref="paper", yref="paper", x=1, y=1.08, showarrow=False,
         xanchor="right", font=dict(size=13, color="#2a78d6"),
         text="<a href='festival_map.html' style='color:#2a78d6'>"
              "▶ Vue simulation en direct (jumeau numérique animé) →</a>")
@@ -82,7 +110,9 @@ def build(scenario_results: dict):
     # section COMPARAISON avec / sans (si l'évaluateur a tourné)
     cmp_div = _comparison_section(log)
 
-    main_div = fig.to_html(full_html=False, include_plotlyjs="cdn")
+    # include_plotlyjs=True -> bibliothèque INLINE : le dashboard rend HORS-LIGNE
+    # (garantie « la démo ne dépend jamais du réseau », comme la vue simulation).
+    main_div = fig.to_html(full_html=False, include_plotlyjs=True)
     html = ("<!DOCTYPE html><html><head><meta charset='utf-8'>"
             "<title>Festival — Dashboard système</title></head>"
             "<body style='font-family:-apple-system,sans-serif;margin:0'>"
@@ -104,10 +134,7 @@ def _comparison_section(log):
     with open(path) as fh:
         cmp = json.load(fh)
     a, s = cmp["avec"], cmp["sans"]
-    def _clock(step):
-        m = (step % C.STEPS_PER_DAY) * C.STEP_MINUTES
-        return f"{10 + m // 60:02d}:{m % 60:02d}"
-    clocks = [_clock(e["step"]) for e in log]
+    clocks = [C.step_to_hhmm(e["step"]) for e in log]
 
     fig = make_subplots(
         rows=2, cols=2,
