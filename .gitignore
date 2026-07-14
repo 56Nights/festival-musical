@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environnements virtuels
+.venv/
+venv/
+
+# Sorties générées (produites par run_demo.py)
+outputs/
+
+# Artefacts d'IDE / OS
+.DS_Store
+.idea/
+.vscode/

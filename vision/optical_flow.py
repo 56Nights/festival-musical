@@ -26,10 +26,13 @@ import numpy as np
 import cv2
 import config as C
 
-# seuils (calibrés sur frames synthétiques 64x64 — à ajuster sur données réelles)
-MAGNITUDE_THRESHOLD   = 2.0    # pixels/frame — calibré sur frames synthétiques 64x64
-COHERENCE_THRESHOLD   = 0.80   # élevé à 0.80 pour distinguer danse (incohérente)
-                                # de bousculade (cohérente, tout le monde fuit pareil)
+# seuils (calibrés sur frames synthétiques 64x64 — à ajuster sur données réelles).
+# La magnitude MOYENNE seule ne sépare pas calme/bousculade (le fond texturé bruite
+# le flux) : c'est la COHÉRENCE directionnelle, calculée UNIQUEMENT sur les pixels
+# au mouvement significatif, qui discrimine (foule qui fuit = vecteurs alignés).
+MAGNITUDE_THRESHOLD   = 2.0    # pixels/frame — mouvement de masse notable
+COHERENCE_THRESHOLD   = 0.55   # part des vecteurs SIGNIFICATIFS alignés (fuite)
+SIGNIF_MAG_FRAC       = 0.5    # un pixel « bouge » si sa magnitude > 0.5×magnitude max
 
 
 def _to_gray_uint8(frame: np.ndarray) -> np.ndarray:
@@ -94,11 +97,20 @@ def compute_optical_flow(prev_frame: np.ndarray,
                                        angleInDegrees=True)
     mean_mag = float(magnitude.mean())
 
-    # cohérence : fraction des vecteurs dans un cone de ±45° autour du dominant
-    dominant = float(np.median(angle[magnitude > 0.5])) if mean_mag > 0.3 else 0.0
-    diff = np.abs(angle - dominant) % 360
-    diff = np.minimum(diff, 360 - diff)
-    coherence = float((diff < 45).mean())
+    # cohérence calculée SUR LES SEULS PIXELS SIGNIFICATIFS (magnitude notable) :
+    # le fond quasi immobile a des angles aléatoires qui, comptés, noyaient la
+    # cohérence (bug initial : moyenne sur TOUS les pixels -> jamais > 0,70).
+    max_mag = float(magnitude.max())
+    signif = magnitude > max(0.5, SIGNIF_MAG_FRAC * max_mag)
+    n_signif = int(signif.sum())
+    if n_signif >= 8:
+        sig_angles = angle[signif]
+        dominant = float(np.median(sig_angles))
+        diff = np.abs(sig_angles - dominant) % 360
+        diff = np.minimum(diff, 360 - diff)
+        coherence = float((diff < 45).mean())    # part des vecteurs SIGNIFICATIFS alignés
+    else:
+        dominant, coherence = 0.0, 0.0           # trop peu de mouvement -> pas de direction
 
     return {
         "mean_magnitude": round(mean_mag, 3),
@@ -127,12 +139,18 @@ class StampedeDetector:
             z: None for z in C.ZONES}
 
     def analyze(self, zone: str, frame: np.ndarray,
-                cnn_density: float, cnn_fallen: bool) -> dict:
+                cnn_density: float, cnn_fallen: bool,
+                prev_frame: np.ndarray | None = None) -> dict:
         """
         zone        : nom de la zone caméra
         frame       : frame courante (C,H,W) float32
         cnn_density : sortie tête densité du CNN (0..1)
         cnn_fallen  : sortie tête fallen_person du CNN (bool)
+        prev_frame  : frame de RÉFÉRENCE pour le flux (optionnel). Fournir la frame
+                      de BASE du même pas (avant mouvement) mesure le déplacement
+                      INTRA-pas — calme = micro-jitter, bousculade = fuite cohérente.
+                      Sans elle, on retombe sur la frame du pas précédent (moins
+                      fiable si les frames successives sont générées indépendamment).
 
         Retourne un dict d'analyse complet pour cette zone / ce pas de temps.
         """
@@ -144,7 +162,7 @@ class StampedeDetector:
             "stampede_alert": False,
         }
 
-        prev = self._prev_frames[zone]
+        prev = prev_frame if prev_frame is not None else self._prev_frames[zone]
         if prev is not None:
             flow = compute_optical_flow(prev, frame)
             result["flow"] = flow
@@ -167,23 +185,33 @@ if __name__ == "__main__":
 
     detector = StampedeDetector()
     print("=== test flux optique ===\n")
+    h, w = C.IMG_SIZE, C.IMG_SIZE
 
-    # --- situation calme : personnes statiques ---
+    def _shift(frame, dx, dy):
+        g = (frame.transpose(1, 2, 0) * 255).astype(np.uint8)
+        M = np.float32([[1, 0, dx], [0, 1, dy]])
+        moved = cv2.warpAffine(g, M, (w, h))
+        return (moved.astype(np.float32) / 255).transpose(2, 0, 1)
+
+    # --- situation calme : LA MÊME scène avec un micro-jitter (mouvement naturel),
+    #     comme le fait le pipeline (_simulate_motion, ±0.5 px) — PAS deux frames
+    #     indépendantes (qui simuleraient à tort un grand déplacement) ---
     f1 = make_frame(density=0.4, fallen=False, obj=False)
-    f2 = make_frame(density=0.4, fallen=False, obj=False)   # peu de mouvement
-    flow = compute_optical_flow(f1, f2)
+    f2_calm = _shift(f1, 0.3, -0.2)
+    flow = compute_optical_flow(f1, f2_calm)
     print(f"Situation calme   -> magnitude={flow['mean_magnitude']:.3f}  "
           f"cohérence={flow['coherence']:.3f}  stampede={flow['stampede']}")
 
-    # --- bousculade simulée : ajout d'un décalage global ---
-    h, w = C.IMG_SIZE, C.IMG_SIZE
-    M = np.float32([[1, 0, 6], [0, 1, 4]])          # translation 6px droite, 4px bas
-    f1_g = (f1.transpose(1,2,0) * 255).astype(np.uint8)
-    f2_rush = cv2.warpAffine(f1_g, M, (w, h))
-    f2_rush = (f2_rush.astype(np.float32) / 255).transpose(2,0,1)
+    # --- bousculade simulée : décalage global cohérent (toute la foule fuit) ---
+    f2_rush = _shift(f1, 6, 4)                       # translation 6px droite, 4px bas
     flow2 = compute_optical_flow(f1, f2_rush)
     print(f"Bousculade simulée-> magnitude={flow2['mean_magnitude']:.3f}  "
           f"cohérence={flow2['coherence']:.3f}  stampede={flow2['stampede']}")
+
+    assert not flow["stampede"], "faux positif : la situation calme est signalée !"
+    assert flow2["stampede"], "faux négatif : la bousculade n'est PAS détectée !"
+    print("\nOK — calme non signalé, bousculade détectée (le flux optique "
+          "discrimine par la cohérence directionnelle).")
 
     # --- fusion trois signaux ---
     print("\n=== test fusion ===")
