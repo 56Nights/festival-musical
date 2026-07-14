@@ -28,7 +28,8 @@ import config as C
 
 # seuils (calibrés sur frames synthétiques 64x64 — à ajuster sur données réelles)
 MAGNITUDE_THRESHOLD   = 2.0    # pixels/frame — calibré sur frames synthétiques 64x64
-COHERENCE_THRESHOLD   = 0.70   # part des vecteurs alignés avec direction dominante
+COHERENCE_THRESHOLD   = 0.80   # élevé à 0.80 pour distinguer danse (incohérente)
+                                # de bousculade (cohérente, tout le monde fuit pareil)
 
 
 def _to_gray_uint8(frame: np.ndarray) -> np.ndarray:
@@ -39,6 +40,35 @@ def _to_gray_uint8(frame: np.ndarray) -> np.ndarray:
                         cv2.COLOR_RGB2GRAY) if frame.ndim == 3 \
            else (frame * 255).astype(np.uint8)
     return gray
+
+
+def compute_optical_flow_gray(prev_gray: np.ndarray,
+                              curr_gray: np.ndarray) -> dict:
+    """
+    Variante travaillant directement sur frames grises uint8 à résolution native.
+    Utilisée par test_video.py pour éviter la perte de mouvement sub-pixel
+    qui survient quand on resize à 64x64 avant le calcul.
+    """
+    flow = cv2.calcOpticalFlowFarneback(
+        prev_gray, curr_gray, None,
+        pyr_scale=0.5, levels=3, winsize=15,
+        iterations=3, poly_n=5, poly_sigma=1.2, flags=0)
+
+    magnitude, angle = cv2.cartToPolar(flow[..., 0], flow[..., 1],
+                                       angleInDegrees=True)
+    mean_mag = float(magnitude.mean())
+    dominant = float(np.median(angle[magnitude > 0.5])) if mean_mag > 0.3 else 0.0
+    diff = np.abs(angle - dominant) % 360
+    diff = np.minimum(diff, 360 - diff)
+    coherence = float((diff < 45).mean())
+
+    return {
+        "mean_magnitude": round(mean_mag, 3),
+        "coherence":      round(coherence, 3),
+        "dominant_angle": round(dominant, 1),
+        "stampede":       mean_mag > MAGNITUDE_THRESHOLD
+                          and coherence > COHERENCE_THRESHOLD,
+    }
 
 
 def compute_optical_flow(prev_frame: np.ndarray,
