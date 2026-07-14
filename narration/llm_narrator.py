@@ -264,25 +264,6 @@ def pick_provider():
 
 
 # ---------------------------------------------------------------- pipeline
-<<<<<<< HEAD
-def summarize(control_log: list, scenarios: dict | None = None) -> str:
-    # extraction des faits saillants du journal
-    alerts = []
-    for e in control_log:
-        med = {}
-        if e["allocation"] and isinstance(e["allocation"].get("medical"), dict):
-            raw = e["allocation"]["medical"]
-            total_medical = C.RESOURCES["medical"]
-            med = {z: v for z, v in raw.items()
-                   if isinstance(v, int) and 0 <= v <= total_medical}
-        for a in e["alerts"]:
-            alerts.append({
-                "step": e["step"], "zone": a["zone"], "types": a["types"],
-                "density": a["density"],
-                "response": f"{med.get(a['zone'], '?')} équipe(s) médicale(s) "
-                            f"positionnée(s) en zone {a['zone']}",
-            })
-=======
 def _load_comparison() -> dict | None:
     p = os.path.join(C.OUT, "kpi_comparison.json")
     if not os.path.exists(p):
@@ -312,7 +293,6 @@ def summarize(control_log: list, scenarios: dict | None = None,
     watches = sum(1 for e in control_log for a in e["alerts"] if a.get("watch"))
     counts = {"total": total, "watches": watches,
               "incident_alerts": total - watches}
->>>>>>> d06bc44e336883733daf3096b539218337cfa238
     n_realloc = sum(e["resolved"] for e in control_log)
 
     # faits pour le LLM : épisodes en HH:MM (pas le dump brut d'alertes)
