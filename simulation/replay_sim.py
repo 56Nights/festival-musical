@@ -103,6 +103,21 @@ def _focal(zone):
     return (cx, (y0 + y1) / 2.0)                 # centre
 
 FOCAL = {z: _focal(z) for z in ACT_ZONES}
+
+
+def _concert_pop(zone, minute):
+    """Popularité du concert actif dans `zone` à cette minute (0 si aucun),
+    avec la même rampe ±15 min que le modèle d'attractivité."""
+    for z, s, e, pop in C.SCHEDULE:
+        if z == zone and s - 15 <= minute <= e + 15:
+            return pop
+    return 0.0
+
+
+def _meal_intensity(minute):
+    """Intensité d'appétit 0..1 à cette minute (gaussiennes déjeuner/dîner)."""
+    return max((float(np.exp(-((minute - c) ** 2) / (2 * w ** 2))) * i
+                for (c, w, i) in C.MEAL_PEAKS), default=0.0)
 # rayon de dispersion max + « aplatissement » (le Camping reste très étalé)
 PACK_RMAX = {z: 0.62 * ((G.ZONE_BBOX[z][2] - G.ZONE_BBOX[z][0]) ** 2
                         + (G.ZONE_BBOX[z][3] - G.ZONE_BBOX[z][1]) ** 2) ** 0.5
@@ -517,6 +532,7 @@ class ReplayEngine:
         for d in self.dots:
             if d.state == "idle" and d.zone in by:
                 by[d.zone].append(d)
+        minute = (step % C.STEPS_PER_DAY) * C.STEP_MINUTES + C.STEP_MINUTES / 2
         for z in ACT_ZONES:
             group = by[z]
             if not group:
@@ -528,11 +544,43 @@ class ReplayEngine:
             R = PACK_RMAX[z]
             x0, y0, x1, y1 = G.ZONE_BBOX[z]
             poly = G.ZONE_SHAPES[z]
+            conc = _concert_pop(z, minute) if z in ("MainStage", "SecondStage") else 0.0
+            meal = _meal_intensity(minute) if z == "FoodCourt" else 0.0
             P = np.empty((len(group), 2))
-            for k, d in enumerate(group):
-                r = R * (d.u ** gamma)
-                P[k, 0] = fx + np.cos(d.ang) * r
-                P[k, 1] = fy + np.sin(d.ang) * r
+            if conc > 0:
+                # CONCERT EN COURS : bande ANISOTROPE pressée contre le devant de
+                # scène (toute la largeur, profondeur qui se comprime avec la
+                # densité) — la foule se masse DEVANT la scène, pas au milieu.
+                cx = (x0 + x1) / 2.0
+                halfw = (x1 - x0) / 2.0 - 12.0
+                ymax = y1 - 10.0
+                for k, d in enumerate(group):
+                    xoff = (d.ang / np.pi) - 1.0          # étalement uniforme [-1,1)
+                    depth = d.u ** gamma                   # dense -> pressé au front
+                    P[k, 0] = cx + xoff * halfw * (1.0 - 0.30 * depth)
+                    P[k, 1] = fy + depth * (ymax - fy)
+            elif meal > 0.15:
+                # PIC REPAS : la majorité de la foule s'aligne en COLONNES devant
+                # les 4 stands (files longues et lisibles) ; le reste flâne en plaza.
+                lanes = G.FOOD_STALLS
+                y_head = lanes[0][1] + 20.0
+                ymax = y1 - 10.0
+                q_share = min(0.9, 0.35 + 0.75 * meal)     # part de la foule en file
+                for k, d in enumerate(group):
+                    h = (d.ang * 7.9177) % 1.0             # tirage stable par point
+                    if h < q_share:
+                        lane = int(((d.ang * 3.313) % 1.0) * len(lanes)) % len(lanes)
+                        P[k, 0] = lanes[lane][0] + (((d.ang * 11.71) % 1.0) - 0.5) * 16.0
+                        P[k, 1] = y_head + (d.u ** 1.1) * (ymax - y_head)
+                    else:
+                        r = R * (d.u ** gamma)
+                        P[k, 0] = fx + np.cos(d.ang) * r
+                        P[k, 1] = fy + np.sin(d.ang) * r
+            else:
+                for k, d in enumerate(group):
+                    r = R * (d.u ** gamma)
+                    P[k, 0] = fx + np.cos(d.ang) * r
+                    P[k, 1] = fy + np.sin(d.ang) * r
             # répulsion légère (pavage) — quelques itérations vectorisées
             n = len(group)
             if n > 1:
@@ -1051,6 +1099,10 @@ def _comparison():
             "mean_outcome": side["mean_outcome"],
             "foodcourt_wait_mean_min": side["foodcourt_wait_mean_min"],
             "foodcourt_wait_p95_min": side.get("foodcourt_wait_p95_min", 0),
+            "wait_over_balk_min": side.get("wait_over_balk_min", 0),
+            "urgent_repositioning": side.get("urgent_repositioning", 0),
+            "alloc_moves_alert": side.get("alloc_moves_alert", 0),
+            "alloc_moves_anticipated": side.get("alloc_moves_anticipated", 0),
             "lost_customers": side["lost_customers"],
             "lost_revenue_eur": side["lost_revenue_eur"],
             "pct_mce_runs": side.get("pct_mce_runs", 0),
@@ -1074,7 +1126,8 @@ def _comparison():
             "contain_avec": A.get("contain_min"), "contain_sans": S.get("contain_min"),
         })
     return {"avec": slim(a), "sans": slim(s),
-            "targets": cmp["targets"], "per_incident": per_inc}
+            "targets": cmp["targets"], "per_incident": per_inc,
+            "alert_quality": cmp.get("alert_quality")}
 
 
 def _header(log, engine):

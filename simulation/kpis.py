@@ -34,7 +34,7 @@ import pandas as pd
 import config as C
 from simulation import geometry as G
 from simulation.mas import travel_time
-from allocation.dynamic_csp import static_allocation
+from allocation.dynamic_csp import scheduled_allocation
 
 ABANDON_INCIDENT_MIN = 30.0        # incident non couvert après 30 min (cf. mas.py)
 TREAT_MIN = C.TREAT_MIN            # durée de prise en charge sur place (sourcée, cf. config)
@@ -190,7 +190,7 @@ def _simulate_incidents(base, alloc_by_step, dens_at, start_step,
         incs.append(child)
         stats["induced"] += 1
 
-    stats = {"induced": 0, "mce": 0, "uncovered": 0,
+    stats = {"induced": 0, "mce": 0, "uncovered": 0, "urgent_moves": 0,
              "outcomes": [], "t_first_aid": [], "t_medic": [], "t_contain": []}
 
     # détection des incidents de BASE (une fois, à l'apparition)
@@ -315,6 +315,8 @@ def _tick_containable(inc, t, ty, dens, nearest, reserve, avail, rng, stats,
             inc["contain_start"] = arrival
             inc["contain_end"] = arrival + dur
             for z, _ in picks:
+                if z != inc["zone"]:
+                    stats["urgent_moves"] += 1   # équipe arrachée à son poste
                 reserve("security", z, t,
                         inc["contain_end"] + travel_time(inc["zone"], z))
 
@@ -349,6 +351,8 @@ def _tick_fall(inc, t, dens, nearest_trained, nearest, reserve, rng, stats):
         best = nearest_trained(inc["zone"], t)
         if best is not None:
             z, tr, rt = best
+            if z != inc["zone"]:
+                stats["urgent_moves"] += 1       # secouriste arraché à son poste
             inc["first_aid_at"] = t + tr
             reserve(rt, z, t, inc["first_aid_at"] + C.FIRST_AID_HOLD_MIN
                     + travel_time(inc["zone"], z))
@@ -363,6 +367,8 @@ def _tick_fall(inc, t, dens, nearest_trained, nearest, reserve, rng, stats):
     if not inc["med_dispatched"]:
         z, tr = nearest("medical", inc["zone"], t)
         if z is not None:
+            if z != inc["zone"]:
+                stats["urgent_moves"] += 1       # médic arraché à son poste
             inc["medic_at"] = t + tr
             treat = float(rng.uniform(*TREAT_MIN))
             reserve("medical", z, t, inc["medic_at"] + treat
@@ -398,16 +404,21 @@ def _reserve_needed(demand, permanent_cap):
                    np.ceil(deficit / C.SERVICE_CAP_PER_STAFF)))
 
 
-def _simulate_service(att_at, start_step, n_steps, service_mode):
+def _simulate_service(att_at, start_step, n_steps, service_mode,
+                      hist_dem=None):
     """File de service FoodCourt (déterministe).
 
     Capacité PERMANENTE (`FC_PERMANENT_STAFF`) insuffisante au pic -> une file
     se forme toujours. Des équipes VOLANTES (réserve) la résorbent :
-      - "proactive" (avec prévision) : déployées dès que la demande dépasse le
-        permanent, sans retard (pré-positionnées grâce au pic prévu) ;
-      - "reactive"  (sans)           : déployées seulement APRÈS que l'attente
-        observée dépasse un seuil, et avec un délai de mobilisation
-        (appel + trajet) -> la file a le temps de grossir et des clients partent.
+      - "proactive"  (avec prévision) : réserve dimensionnée sur la demande
+        PRÉVUE du jour, pré-déployée sans retard -> ajustée au jour réel ;
+      - "scheduled"  (sans, planning) : réserve PLANIFIÉE aux heures de repas,
+        dimensionnée sur la demande des JOURS PRÉCÉDENTS (`hist_dem`) — le
+        planificateur connaît les pics mais pas l'ampleur du jour. Si le jour
+        réel dépasse le plan, un renfort réactif est appelé (délai de
+        mobilisation) -> la file a le temps de grossir ;
+      - "reactive"   (héritage)       : aucun plan, renforts appelés seulement
+        après que l'attente observée dépasse un seuil.
     """
     permanent = C.FC_PERMANENT_STAFF * C.SERVICE_CAP_PER_STAFF
     dem = [att_at.get((start_step + idx, "FoodCourt"), 0.0)
@@ -416,16 +427,29 @@ def _simulate_service(att_at, start_step, n_steps, service_mode):
     lost_cust = lost_rev = 0.0
     prev_wait = 0.0
     reserve = 0
+    extra = 0             # renforts réactifs au-delà du plan (mode scheduled)
     pending = []          # arrivées d'équipes volantes en cours de mobilisation
     series = []
     for idx in range(n_steps):
         if service_mode == "proactive":
             # prévision : la réserve nécessaire est PRÉ-déployée (anticipation)
             reserve = _reserve_needed(dem[idx], permanent)
+        elif service_mode == "scheduled":
+            # plan : renforts aux créneaux repas, taille = demande HISTORIQUE ;
+            # si le jour réel déborde le plan, top-up réactif avec délai.
+            planned = _reserve_needed(hist_dem[idx] if hist_dem else 0.0,
+                                      permanent)
+            due = sum(1 for p in pending if p <= idx)
+            extra += due
+            pending = [p for p in pending if p > idx]
+            if prev_wait > C.RESERVE_TRIGGER_WAIT_MIN \
+                    and planned + extra + len(pending) < C.RESERVE_LOGISTICS:
+                pending.append(idx + C.RESERVE_MOBILIZE_STEPS)
+            elif prev_wait < 1.0 and extra > 0 and not pending:
+                extra -= 1                                       # renfort libéré
+            reserve = min(C.RESERVE_LOGISTICS, planned + extra)
         else:
-            # réactif : les renforts arrivent après leur délai de mobilisation,
-            # UN par UN, appelés tant que l'attente OBSERVÉE reste élevée. Il faut
-            # donc re-mobiliser à chaque pic (avec retard) -> la file grossit.
+            # réactif pur : renforts après coup, UN par UN, avec mobilisation.
             due = sum(1 for p in pending if p <= idx)
             reserve += due
             pending = [p for p in pending if p > idx]
@@ -451,8 +475,11 @@ def _simulate_service(att_at, start_step, n_steps, service_mode):
         prev_wait = wait
         lost_cust += balked
         lost_rev += balked * C.MEAL_BASKET_EUR
-        series.append({"wait": round(wait, 1), "queue": int(q),
-                       "reserve": reserve, "served": int(served),
+        # `west` = attente ESTIMÉE par le client qui ARRIVE (avant renoncement) :
+        # c'est elle qui déclenche le balking — l'attente enregistrée APRÈS est
+        # auto-censurée (les clients partis ne font plus la queue).
+        series.append({"wait": round(wait, 1), "west": round(w_est, 1),
+                       "queue": int(q), "reserve": reserve, "served": int(served),
                        "cum_lost": int(round(lost_cust)),
                        "cum_rev": int(round(lost_rev))})
     return series, lost_cust, lost_rev
@@ -495,7 +522,7 @@ def evaluate(log, detection_mode, n_runs=None, seed=2027, service_mode="proactiv
 
     rng = np.random.default_rng(seed)
     t_medic_all, det_all, fa_all, contain_all, out_all = [], [], [], [], []
-    induced_runs, mce_runs, unc_runs = [], [], []
+    induced_runs, mce_runs, unc_runs, urgent_runs = [], [], [], []
     n_parents = 0
     rep_timeline = None
     per_inc_acc = {i["idx"]: {"det": [], "resp": [], "contain": [], "out": []}
@@ -514,6 +541,7 @@ def evaluate(log, detection_mode, n_runs=None, seed=2027, service_mode="proactiv
         induced_runs.append(res["induced"])
         mce_runs.append(res["mce"])
         unc_runs.append(res["uncovered"])
+        urgent_runs.append(res["urgent_moves"])
         for idx, v in res["per_inc"].items():
             per_inc_acc[idx]["det"].append(v["detect_delay"])
             if v["response"] is not None:
@@ -524,9 +552,29 @@ def evaluate(log, detection_mode, n_runs=None, seed=2027, service_mode="proactiv
                 per_inc_acc[idx]["out"].append(v["outcome"])
             det_all.append(v["detect_delay"])
 
-    # service : déterministe (une seule passe)
+    # service : déterministe (une seule passe). En mode « scheduled », la
+    # réserve planifiée est dimensionnée sur la demande des JOURS PRÉCÉDENTS
+    # à la même heure (le planificateur connaît les pics, pas l'ampleur du jour).
+    hist_dem = None
+    if service_mode == "scheduled":
+        sids = [s % C.STEPS_PER_DAY for s in steps]
+        hist = df[df["day"] < C.FESTIVAL_DAYS - 1].copy()
+        hist = hist[hist["zone"] == "FoodCourt"]
+        hist["tod"] = hist["step"] % C.STEPS_PER_DAY
+        mean_fc = hist.groupby("tod")["attendance"].mean()
+        raw = [float(mean_fc.get(sid, 0.0)) * _meal_join(idx * C.STEP_MINUTES)
+               for idx, sid in enumerate(sids)]
+        # roster réel = BLOCS HORAIRES : le plan est constant sur chaque heure,
+        # dimensionné sur la MOYENNE de l'heure -> il sous-couvre le pic
+        # intra-heure (la prévision, elle, ajuste par quart d'heure).
+        sph = 60 // C.STEP_MINUTES
+        hist_dem = []
+        for h0 in range(0, len(raw), sph):
+            block = raw[h0:h0 + sph]
+            hist_dem.extend([float(np.mean(block))] * len(block))
+        hist_dem = hist_dem[:len(raw)]
     svc_series, lost_cust, lost_rev = _simulate_service(
-        att_at, start_step, n_steps, service_mode)
+        att_at, start_step, n_steps, service_mode, hist_dem=hist_dem)
 
     def agg(a):
         a = np.array(a, dtype=float)
@@ -568,9 +616,17 @@ def evaluate(log, detection_mode, n_runs=None, seed=2027, service_mode="proactiv
                               * 100, 0),           # % de rejeux atteignant un MCE
         "mean_uncovered": round(float(np.mean(unc_runs)), 2),
         "n_incidents": len(incidents),
+        # charge opérationnelle : équipes ARRACHÉES à leur poste par un incident
+        # (dépêches inter-zones ; les déplacements planifiés/anticipés n'y sont pas)
+        "mean_urgent_moves": round(float(np.mean(urgent_runs)), 1) if urgent_runs else 0.0,
         # C. service FoodCourt
         "foodcourt_wait_mean_min": round(float(np.mean([s["wait"] for s in svc_series])), 1),
         "foodcourt_wait_p95_min": round(float(np.percentile([s["wait"] for s in svc_series], 95)), 1),
+        # durée cumulée (min) où l'attente ESTIMÉE à l'arrivée dépasse le seuil
+        # de renoncement (10 min) — la stat « rush » : pendant tout ce temps,
+        # des clients repartent sans acheter (balking actif)
+        "wait_over_balk_min": int(sum(C.STEP_MINUTES for s in svc_series
+                                      if s["west"] > C.BALK_THRESHOLD_MIN)),
         "lost_customers": int(round(lost_cust)),
         "lost_revenue_eur": int(round(lost_rev)),
         "response_samples": [round(float(x), 1) for x in np.sort(resp)[:400]],
@@ -608,6 +664,27 @@ def _step_series(incidents, per_inc_out, svc_series, steps):
 # ---------------------------------------------------------------------------
 # Comparaison avec / sans + ablation
 # ---------------------------------------------------------------------------
+def _alloc_move_counts(log):
+    """Compte les mouvements d'équipe entre pas consécutifs du journal, ventilés
+    URGENCE (déclencheur « event » = alerte terrain) vs PLANIFIÉ/ANTICIPÉ
+    (rotations du planning, pré-positionnements sur prévision, périodiques).
+    Un mouvement = une équipe qui change de zone (Σ|Δ|/2)."""
+    urgent = planned = 0
+    prev = None
+    for e in log:
+        a = e.get("allocation")
+        if a and prev and a != prev:
+            mv = sum(abs(a[r][z] - prev[r].get(z, 0))
+                     for r in a for z in a[r]) // 2
+            if e.get("trigger") == "event":
+                urgent += mv
+            else:
+                planned += mv
+        if a:
+            prev = a
+    return urgent, planned
+
+
 def compare(n_runs=None, out_path=None):
     out_path = out_path or os.path.join(C.OUT, "kpi_comparison.json")
     with open(os.path.join(C.OUT, "control_log.json")) as f:
@@ -616,7 +693,26 @@ def compare(n_runs=None, out_path=None):
         reac_log = json.load(f)
 
     avec = evaluate(pred_log, "cnn", n_runs, service_mode="proactive")
-    sans = evaluate(reac_log, "human", n_runs, service_mode="reactive")
+    sans = evaluate(reac_log, "human", n_runs, service_mode="scheduled")
+
+    # repositionnements — deux natures, comptées SÉPARÉMENT (pas de double
+    # compte : un déplacement CSP sur alerte et la dépêche qu'il matérialise
+    # sont le même mouvement physique) :
+    #  * COURSES EN URGENCE : équipes arrachées à leur poste pour rejoindre un
+    #    incident dans une AUTRE zone (Monte-Carlo, mesuré identiquement dans
+    #    les deux scénarios). C'est LA métrique « subie » : le pré-positionnement
+    #    prédictif doit la réduire.
+    #  * DÉPLACEMENTS DE POSTE COMMANDÉS : redéploiements décidés par le PC —
+    #    avec : sur alerte (event) ou anticipés (prévision/périodique) ;
+    #    sans : rotations horaires du planning. Des mouvements PRÉVUS, en contexte.
+    a_urg_alloc, a_plan_alloc = _alloc_move_counts(pred_log)
+    s_urg_alloc, s_plan_alloc = _alloc_move_counts(reac_log)   # s_urg = 0 (aucun event)
+    avec["urgent_repositioning"] = avec["mean_urgent_moves"]
+    sans["urgent_repositioning"] = sans["mean_urgent_moves"]
+    avec["alloc_moves_alert"] = a_urg_alloc
+    avec["alloc_moves_anticipated"] = a_plan_alloc
+    sans["alloc_moves_alert"] = s_urg_alloc
+    sans["alloc_moves_anticipated"] = s_plan_alloc             # rotations du planning
 
     payload = {
         "avec": avec, "sans": sans,
@@ -626,28 +722,37 @@ def compare(n_runs=None, out_path=None):
                     "balk_threshold_min": C.BALK_THRESHOLD_MIN,
                     "basket_eur": C.MEAL_BASKET_EUR},
     }
+    # qualité du détecteur caméra (précision/rappel) -> le Bilan peut expliquer
+    # pourquoi la détection moyenne dépasse la latence caméra de ~1 min.
+    aq_path = os.path.join(C.OUT, "alert_metrics.json")
+    if os.path.exists(aq_path):
+        with open(aq_path) as f:
+            payload["alert_quality"] = json.load(f)
     with open(out_path, "w") as f:
         json.dump(payload, f, separators=(",", ":"))
     return payload
 
 
 def ablation(n_runs=None, out_path=None):
-    """2×2 : prévision (alloc dynamique vs statique) × vision (cnn vs humain)."""
+    """2×2 : prévision (alloc dynamique vs planning pré-établi) × vision (cnn
+    vs humain). Sans prévision, l'allocation ET le service suivent le PLANNING
+    construit sur les jours précédents (baseline compétente, pas un strawman)."""
     out_path = out_path or os.path.join(C.OUT, "kpi_ablation.json")
     with open(os.path.join(C.OUT, "control_log.json")) as f:
         pred_log = json.load(f)
-    # allocation statique appliquée sur la même fenêtre de pas
+    # planning pré-établi appliqué sur la même fenêtre de pas
     steps = [e["step"] for e in pred_log]
-    sa = static_allocation()
-    stat_log = [{"step": s, "alerts": e.get("alerts", []),
-                 "truth_incidents": e.get("truth_incidents", []),
-                 "allocation": sa} for s, e in zip(steps, pred_log)]
-    # prévision ON -> réserve pré-déployée (proactive) ; OFF -> réactive
+    plans = scheduled_allocation()
+    sched_log = [{"step": s, "alerts": e.get("alerts", []),
+                  "truth_incidents": e.get("truth_incidents", []),
+                  "allocation": plans[s % C.STEPS_PER_DAY]}
+                 for s, e in zip(steps, pred_log)]
+    # prévision ON -> réserve ajustée au jour (proactive) ; OFF -> planifiée
     variants = {
         "complet (prévision + vision)": (pred_log, "cnn", "proactive"),
         "prévision seule":              (pred_log, "human", "proactive"),
-        "vision seule":                 (stat_log, "cnn", "reactive"),
-        "aucun (réactif)":              (stat_log, "human", "reactive"),
+        "vision seule":                 (sched_log, "cnn", "scheduled"),
+        "aucun (planning)":             (sched_log, "human", "scheduled"),
     }
     res = {}
     for name, (log, mode, svc) in variants.items():
@@ -656,6 +761,7 @@ def ablation(n_runs=None, out_path=None):
             "mean_response_min", "p95_response_min", "mean_detect_min",
             "mean_first_aid_min", "pct_within_target", "mean_induced",
             "r_eff", "mean_mce", "mean_outcome", "mean_uncovered",
+            "mean_urgent_moves", "wait_over_balk_min",
             "lost_customers", "lost_revenue_eur")}
     with open(out_path, "w") as f:
         json.dump(res, f, indent=1)
@@ -703,7 +809,7 @@ def _self_check():
 
     abl = ablation(n_runs=30)
     comp = abl["complet (prévision + vision)"]
-    none = abl["aucun (réactif)"]
+    none = abl["aucun (planning)"]
     vis = abl["vision seule"]
     fore = abl["prévision seule"]
     # (c) monotonies attendues (attribution module par module) :
@@ -739,6 +845,15 @@ def _self_check():
           f"  (issues défav. évitées ~{(a['mean_outcome']-s['mean_outcome'])*a['n_casualties']:.1f})")
     print(f"  clients perdus  avec/sans  : {a['lost_customers']} / {s['lost_customers']} "
           f"(-> ~{s['lost_revenue_eur'] - a['lost_revenue_eur']} € sauvés)")
+    print(f"  file > 10 min   avec/sans  : {a['wait_over_balk_min']} / "
+          f"{s['wait_over_balk_min']} min cumulées (attente estimée à l'arrivée "
+          f"> seuil de renoncement -> clients qui repartent)")
+    print(f"  courses urgence avec/sans  : {a['urgent_repositioning']} / "
+          f"{s['urgent_repositioning']} (équipe arrachée à son poste vers un "
+          f"incident hors zone ; déplacements anticipés/planifiés non comptés)")
+    print(f"  dépl. commandés avec/sans  : {a['alloc_moves_alert']} sur alerte + "
+          f"{a['alloc_moves_anticipated']} anticipés / "
+          f"{s['alloc_moves_anticipated']} rotations planifiées")
     print("\n  Ablation (réponse médic | détection | R_eff | issue | CA perdu) :")
     for name, v in abl.items():
         print(f"    {name:30s} {v['mean_response_min']['mean']:5.1f} | "

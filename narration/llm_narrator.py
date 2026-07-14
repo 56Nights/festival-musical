@@ -114,9 +114,18 @@ def _impact_section(cmp) -> list:
         f"{s['mean_outcome']:.0%} (les premiers gestes précoces gèlent la "
         f"dégradation), soit ~{outcome_gain*a.get('n_casualties',0):.0f} issues "
         f"défavorables évitées.",
-        f"- **Service FoodCourt** : {a['lost_customers']} clients perdus "
-        f"contre {s['lost_customers']} — soit **~{saved} € de ventes sauvées** "
-        f"en déployant les équipes volantes AVANT le pic plutôt qu'en réaction.",
+        f"- **Service FoodCourt (rush)** : file au-delà du seuil de renoncement "
+        f"(10 min) pendant {a.get('wait_over_balk_min', '?')} min cumulées contre "
+        f"{s.get('wait_over_balk_min', '?')} min — {a['lost_customers']} clients "
+        f"perdus contre {s['lost_customers']}, soit **~{saved} € de ventes "
+        f"sauvées** en ajustant les équipes volantes à la demande RÉELLE du jour "
+        f"plutôt qu'au planning historique.",
+        f"- **Charge opérationnelle** : {a.get('urgent_repositioning', '?')} courses "
+        f"en urgence vers un incident hors zone contre "
+        f"{s.get('urgent_repositioning', '?')} (pré-positionnement) ; "
+        f"{a.get('alloc_moves_alert', 0) + a.get('alloc_moves_anticipated', 0)} "
+        f"redéploiements commandés contre {s.get('alloc_moves_anticipated', '?')} "
+        f"rotations planifiées du planning.",
     ]
 
 
@@ -206,7 +215,7 @@ def _template_fallback(episodes, counts, reallocs, actions,
     if comparison:
         a, s = comparison["avec"], comparison["sans"]
         saved = s["lost_revenue_eur"] - a["lost_revenue_eur"]
-        L.append(f"- Gestion prédictive vs réactive : arrivée médecin "
+        L.append(f"- Gestion prédictive vs planning pré-établi : arrivée médecin "
                  f"{a['mean_response_min']['mean']} vs {s['mean_response_min']['mean']} min, "
                  f"~{saved} € de ventes sauvées.")
 
@@ -284,7 +293,8 @@ def _load_comparison() -> dict | None:
     keep = ("mean_response_min", "mean_detect_min", "mean_first_aid_min",
             "pct_within_target", "mean_uncovered", "mean_induced", "r_eff",
             "mean_mce", "mean_outcome", "n_casualties", "lost_customers",
-            "lost_revenue_eur")
+            "lost_revenue_eur", "wait_over_balk_min", "urgent_repositioning",
+            "alloc_moves_alert", "alloc_moves_anticipated")
     return {"avec": {k: cmp["avec"][k] for k in keep},
             "sans": {k: cmp["sans"][k] for k in keep},
             "targets": cmp["targets"]}

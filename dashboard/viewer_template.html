@@ -1311,8 +1311,11 @@ function buildSummary(){
   card.innerHTML =
     `<h3>Bilan de la journée</h3>`+
     `<p class="sub">La même journée rejouée avec les <b>mêmes incidents</b>, en gestion `+
-      `<b>prédictive</b> (prévision + détection auto + ré-allocation) vs <b>réactive</b> (sans). `+
-      `Chaque ligne est <b>dépliable</b> pour le détail et la source. Moyennes sur ${runs} rejeux.</p>`+
+      `<b>prédictive</b> (prévision + détection auto + ré-allocation) vs <b>planning pré-établi</b> `+
+      `(sans) : un organisateur compétent qui connaît le programme et l'affluence des jours `+
+      `précédents, poste ses équipes par blocs horaires et les fait revenir à leur poste après `+
+      `chaque incident — mais sans détection automatique ni ajustement au jour réel. `+
+      `Chaque ligne est <b>dépliable</b> pour le détail du CALCUL et la source. Moyennes sur ${runs} rejeux.</p>`+
     `<p class="sub" style="opacity:.75;font-size:12px">Note : l'« Arrivée médecin » ci-dessous inclut le `+
       `<b>délai de détection</b> (≈ +1 min) ; la tuile « trajet moy. » de la carte ne compte que le `+
       `<b>trajet</b> des équipes (dépêche immédiate). Deux mesures distinctes du même système.</p>`+
@@ -1332,19 +1335,30 @@ function buildSummary(){
     `<div class="grp">Réponse aux incidents — chaîne de secours</div>`+
     kpi('Détection', mn(av.mean_detect_min), mn(sv.mean_detect_min),
       av.mean_detect_min, sv.mean_detect_min, false,
-      'Délai apparition → signalement. <b>Avec</b> : caméra + flux optique en temps réel '+
-      '(~1 min ; l\'inférence vision tourne à 40 fps, Marsden 2016). <b>Sans</b> : découverte par '+
-      'un agent, ralentie par l\'occlusion en foule — un opérateur vidéo humain ne repère que '+
-      '~46 % des incidents (Piza &amp; Moton 2023).')+
+      'Délai apparition → signalement, <b>moyenné sur TOUS les incidents</b>. <b>Calcul avec</b> : '+
+      'quand la caméra détecte l\'incident'+
+      (CMP.alert_quality?` (rappel mesuré ${Math.round(CMP.alert_quality.recall*100)} % après filtrage anti-faux-positifs)`:'')+
+      ', signalement en ~1 min (inférence temps réel, Marsden 2016) ; les incidents MANQUÉS par '+
+      'la caméra — et les bagarres, invisibles pour elle — suivent la découverte humaine ci-dessous. '+
+      'La moyenne mélange donc ~1 min (détectés) et plusieurs minutes (manqués) : c\'est pourquoi '+
+      'elle dépasse 1 min. <b>Calcul sans</b> : découverte humaine seule = 2 min de radio + un '+
+      'délai exponentiel de base 4,5 min, <b>allongé par l\'occlusion</b> (×(1 + 2,2 × densité de '+
+      'foule)) et <b>réduit par les agents présents</b> (÷ nb d\'yeux en zone) — un opérateur '+
+      'vidéo humain ne repère que ~46 % des incidents (Piza &amp; Moton 2023).')+
     kpi('Premiers gestes', mn(av.mean_first_aid_min), mn(sv.mean_first_aid_min),
       av.mean_first_aid_min, sv.mean_first_aid_min, false,
-      `Temps avant les 1ers gestes d'un secouriste. <b>Cible BLS &lt; ${fa} min</b> (médecine de `+
-      'rassemblement de masse, StatPearls / NIH NBK597369). Ces gestes « gèlent » la dégradation '+
-      'de la victime en attendant le médecin.')+
+      `<b>Calcul</b> : délai jusqu'aux premiers gestes du staff formé le plus proche (sécurité ou `+
+      'médical) = détection + dépêche + trajet <b>dérivé de la géométrie du site</b> (longueur '+
+      'd\'allée × 0,5 m/u ÷ 1,5 m/s, ralenti en foule dense — diagramme de Weidmann). Le '+
+      `<b>« ${fa} min » n'est PAS un paramètre du calcul</b> : c'est la cible clinique BLS `+
+      '(StatPearls / NIH NBK597369) à laquelle on COMPARE le résultat. Ces gestes « gèlent » la '+
+      'dégradation de la victime en attendant le médecin.')+
     kpi('Arrivée médecin', mn(av.mean_response_min), mn(sv.mean_response_min),
       av.mean_response_min, sv.mean_response_min, false,
-      `Temps avant une équipe médicale sur place. <b>Cible ALS &lt; ${als} min</b> (StatPearls / NIH). `+
-      'Un intervenant est ralenti en traversant une foule dense (diagramme piéton de Weidmann).')+
+      `<b>Calcul</b> : détection + dépêche de l'équipe MÉDICALE libre la plus proche + trajet `+
+      'géométrique (ralenti en foule dense, Weidmann). La <b>cible ALS &lt; '+als+' min</b> est le '+
+      'standard clinique (StatPearls / NIH) auquel on compare — pas un paramètre. Le '+
+      'pré-positionnement prédictif réduit surtout le TRAJET (équipe déjà dans la zone chaude).')+
     kpi(`Médecin en &lt; ${als} min`, av.pct_within_target+' %', sv.pct_within_target+' %',
       av.pct_within_target, sv.pct_within_target, true,
       `Part des victimes atteintes par le médecin <b>avant la cible ALS de ${als} min</b>. `+
@@ -1370,20 +1384,51 @@ function buildSummary(){
       'Score agrégé, <b>100 % = indemne</b>. Prise en charge plus tôt = dégradation stoppée plus '+
       'tôt → score plus élevé avec le système. <b>Plus haut = mieux.</b> Indicateur de risque, '+
       'PAS une prédiction de décès individuel.')+
-    `<div class="grp">Service — FoodCourt</div>`+
-    kpi('Attente (moy. · pic)', mn(av.foodcourt_wait_mean_min)+' · '+nb(av.foodcourt_wait_p95_min),
+    `<div class="grp">Service — FoodCourt (pics de rush)</div>`+
+    kpi(`File &gt; ${T.balk_threshold_min||10} min (durée)`,
+      Math.round(av.wait_over_balk_min)+' min', Math.round(sv.wait_over_balk_min)+' min',
+      av.wait_over_balk_min, sv.wait_over_balk_min, false,
+      `<b>LA stat du rush</b> : durée cumulée pendant laquelle un client ARRIVANT à la file voyait `+
+      `plus de ${T.balk_threshold_min||10} min d'attente estimée — le seuil au-delà duquel il `+
+      `<b>renonce</b> et repart sans acheter (balking Erlang-A, Palm 1957 / Garnett-Mandelbaum-`+
+      `Reiman 2002). L'attente MOYENNE journalière (${mn(av.foodcourt_wait_mean_min)} vs `+
+      `${mn(sv.foodcourt_wait_mean_min)}) est trompeuse : elle dilue les rushs dans les heures `+
+      `creuses, et l'attente observée s'auto-limite précisément parce que les clients excédés `+
+      `sont déjà partis. Pendant ces minutes-là, chaque pas de 15 min perd des clients.`)+
+    kpi('Attente (moy. · p95)', mn(av.foodcourt_wait_mean_min)+' · '+nb(av.foodcourt_wait_p95_min),
       mn(sv.foodcourt_wait_mean_min)+' · '+nb(sv.foodcourt_wait_p95_min),
       av.foodcourt_wait_p95_min, sv.foodcourt_wait_p95_min, false,
-      'Attente à la file (moyenne · p95 du pic). Un client qui voit plus de '+
-      `${T.balk_threshold_min||10} min d'attente <b>renonce</b> avec une probabilité croissante `+
-      '(balking exponentiel, modèle Erlang-A de Palm 1957 / Garnett-Mandelbaum-Reiman 2002).')+
+      'Attente à la file sur la journée ENTIÈRE (moyenne · p95) — faible car la journée compte '+
+      'beaucoup d\'heures creuses et que le balking écrête les files ; voir la ligne « rush » '+
+      'ci-dessus pour la lecture opérationnelle.')+
     kpi('Clients perdus', eur(av.lost_customers), eur(sv.lost_customers),
       av.lost_customers, sv.lost_customers, false,
       `Clients repartis sans commander (balking) sur la journée ; chacun ≈ ${T.basket_eur||14} € de `+
-      'panier perdu (données POS atVenu, 650+ festivals).')+
-    `<p class="honesty">Le scénario « sans » est un modèle calibré sur des données réelles `+
-      `(cibles médicales BLS/ALS, diagramme piéton de Weidmann, files d'attente Erlang-A, `+
-      `littérature crowd-safety) — détail et sources dans docs/calibration-donnees-reelles.md.</p>`+
+      'panier perdu (données POS atVenu, 650+ festivals). <b>Sans</b> : les renforts volants sont '+
+      'PLANIFIÉS aux heures de repas (dimensionnés sur les jours précédents, par blocs horaires) '+
+      '— mais le plan ne suit ni la demande réelle du jour ni les rampes intra-heure.')+
+    `<div class="grp">Charge opérationnelle — déplacements d'équipes</div>`+
+    kpi('Courses en urgence', nb(av.urgent_repositioning)+'/j', nb(sv.urgent_repositioning)+'/j',
+      av.urgent_repositioning, sv.urgent_repositioning, false,
+      `<b>Calcul</b> : nombre moyen de fois (par journée rejouée) où une équipe est ARRACHÉE à son `+
+      'poste pour rejoindre un incident dans une AUTRE zone — le sprint subi, fatigant et risqué. '+
+      'Compté à l\'identique dans les deux scénarios. Les déplacements <b>anticipés</b> par la '+
+      'prévision et les <b>rotations planifiées</b> du planning ne comptent pas : ce sont des '+
+      'mouvements décidés à froid. Le pré-positionnement prédictif met l\'équipe dans la bonne '+
+      'zone AVANT l\'incident → moins de courses.')+
+    kpi('Déplacements commandés', (av.alloc_moves_alert+av.alloc_moves_anticipated)+
+      ' <span style="font-weight:400">(dont '+av.alloc_moves_alert+' sur alerte)</span>',
+      sv.alloc_moves_anticipated+' <span style="font-weight:400">(rotations planifiées)</span>',
+      av.alloc_moves_alert+av.alloc_moves_anticipated, sv.alloc_moves_anticipated, false,
+      `Redéploiements de POSTE décidés par le PC sur la journée (hors courses vers un incident). `+
+      '<b>Avec</b> : le CSP ne redéploie que quand cela vaut le coup (hystérésis) — sur alerte '+
+      'confirmée ou pic prévu. <b>Sans</b> : le planning fait tourner les équipes à chaque bloc '+
+      'horaire, que ce soit utile ou non ce jour-là.')+
+    `<p class="honesty">Le scénario « sans » n'est PAS un homme de paille : c'est un planning `+
+      `compétent, construit sur l'affluence réellement observée les jours précédents (blocs `+
+      `horaires, renforts repas planifiés, retour au poste après incident), calibré sur des `+
+      `données réelles (cibles BLS/ALS, diagramme piéton de Weidmann, files Erlang-A) — détail `+
+      `et sources dans docs/calibration-donnees-reelles.md.</p>`+
     `<div class="btns"><button class="close" onclick="hideSummary()">Fermer ▶</button>`+
       `<button class="replay" onclick="hideSummary();seek(0);setPlaying(true)">↺ Rejouer</button></div>`;
 }

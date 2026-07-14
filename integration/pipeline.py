@@ -86,16 +86,20 @@ def _window(start_step, n_steps):
 def run_reactive_loop(start_step: int = None, n_steps: int = None):
     """Scénario « SANS gestion prédictive » (baseline de comparaison).
 
-    Aucun modèle : pas de prévision (donc aucun pré-positionnement), pas de
-    vision (la détection sera HUMAINE, modélisée en aval par `kpis.py`). Le plan
-    d'équipes est FIXE toute la journée (`static_allocation`). On journalise
-    quand même la vérité terrain des incidents pour que l'évaluateur rejoue les
-    MÊMES incidents que le scénario prédictif.
+    Aucun modèle, mais un ORGANISATEUR COMPÉTENT : les équipes suivent un
+    PLANNING PRÉ-ÉTABLI par quart d'heure (`scheduled_allocation`), construit
+    sur l'affluence observée les jours précédents à la même heure — il « sait »
+    donc que MainStage sature à la tête d'affiche et le FoodCourt aux repas.
+    Elles le suivent scrupuleusement ; un incident les dépêche (modélisé en aval
+    par `kpis.py`) puis elles reviennent à leur poste. Pas de vision (détection
+    HUMAINE) ni d'ajustement à la demande réelle du jour. On journalise la
+    vérité terrain des incidents pour que l'évaluateur rejoue les MÊMES
+    incidents que le scénario prédictif.
     """
-    from allocation.dynamic_csp import static_allocation
+    from allocation.dynamic_csp import scheduled_allocation
     events = pd.read_csv(C.EVENTS_CSV)
     start_step, n_steps = _window(start_step, n_steps)
-    alloc = static_allocation()
+    plans = scheduled_allocation()
     log = []
     for step in range(start_step, min(start_step + n_steps, C.TOTAL_STEPS)):
         truth = events[events["step"] == step]
@@ -104,7 +108,8 @@ def run_reactive_loop(start_step: int = None, n_steps: int = None):
             "trigger": None, "forecast_peak": {},
             "truth_incidents": [{"zone": r.zone, "type": r.type}
                                 for r in truth.itertuples()],
-            "allocation": alloc, "solver_status": "STATIC",
+            "allocation": plans[step % C.STEPS_PER_DAY],
+            "solver_status": "SCHEDULED",
         })
     with open(os.path.join(C.OUT, "control_log_reactive.json"), "w") as f:
         json.dump(log, f, indent=1)

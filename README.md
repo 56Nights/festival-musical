@@ -240,10 +240,15 @@ Repères : `f=30` (matin, site vide), `f=610` (ruée + file), `f=785` (egress).
   un p95 de ~29 min et ~0 incident non couvert, contre ~38 min et des dizaines
   de non-couverts pour une allocation uniforme naïve (20 runs Monte-Carlo)
 - **Impact avec / sans gestion prédictive** (évaluateur `kpis.py`, mêmes
-  incidents) : détection ~3,5 vs ~5,8 min, arrivée médic ~3,3 vs ~7,0 min
-  (**93 % vs 62 %** sous la cible ALS de 8 min), issue des victimes 68 % vs 43 %,
-  ~26 000 € de ventes FoodCourt sauvées — bilan détaillé et expliqué à la fin de
-  la vue simulation
+  incidents). Le « sans » n'est **pas un strawman** : c'est un **planning
+  pré-établi compétent** (équipes postées par blocs horaires sur l'affluence
+  observée les jours précédents, renforts FoodCourt planifiés aux repas, retour
+  au poste après incident) — seul manque le **temps réel** (détection caméra,
+  ajustement à la demande du jour). Écarts mesurés : détection ~4,7 vs ~5,3 min,
+  arrivée médic ~5,0 vs ~5,9 min (**88 % vs 76 %** sous la cible ALS de 8 min),
+  issue des victimes 58 % vs 53 %, file FoodCourt au-delà du seuil de
+  renoncement (10 min) pendant ~15 vs ~30 min cumulées, ~1 700 € de ventes
+  sauvées — bilan détaillé et expliqué à la fin de la vue simulation
 
 ## Justification des choix (Compétence 3 — Concevoir)
 

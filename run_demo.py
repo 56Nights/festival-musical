@@ -114,6 +114,10 @@ print(f"  réponse    avec/sans : {_a['mean_response_min']['mean']} / "
 _retained = _s['lost_customers'] - _a['lost_customers']
 print(f"  CA FoodCourt sauvé   : ~{_s['lost_revenue_eur'] - _a['lost_revenue_eur']} € "
       f"({_retained} clients retenus ; {_s['lost_customers']} perdus sans le système)")
+print(f"  file > 10 min        : {_a['wait_over_balk_min']} / {_s['wait_over_balk_min']} min "
+      f"cumulées avec/sans (seuil de renoncement)")
+print(f"  courses en urgence   : {_a['urgent_repositioning']} / {_s['urgent_repositioning']} "
+      f"par jour avec/sans (équipe arrachée à son poste)")
 
 print("\n" + "=" * 60)
 print("7/9  Vue simulation spatiale (jumeau numérique animé)")

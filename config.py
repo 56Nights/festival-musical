@@ -122,12 +122,17 @@ SCHEDULE = [
 HEADLINER_START_MIN = 660          # repère (dérivé de SCHEDULE) pour la boucle
 HEADLINER_END_MIN = 750
 
-# ---------- Démo A/B : gestion PRÉDICTIVE (avec) vs RÉACTIVE (sans) ----------
+# ---------- Démo A/B : gestion PRÉDICTIVE (avec) vs PLANNING PRÉ-ÉTABLI ------
 # Deux runs rejouent les MÊMES données (affluence, incidents) ; seule la GESTION
 # change. « Avec » = pipeline complet (prévision -> pré-positionnement,
-# vision -> détection ~1 min, CSP dynamique). « Sans » = plan d'équipes FIXE
-# (proportionnel à la capacité, jamais réoptimisé) + détection HUMAINE (un
-# agent doit voir l'incident puis le signaler par radio). On mesure l'écart.
+# vision -> détection ~1 min quand elle détecte, CSP dynamique). « Sans » =
+# PLANNING PRÉ-ÉTABLI compétent : équipes postées par BLOCS HORAIRES
+# proportionnellement à l'affluence observée les jours précédents à la même
+# heure (l'organisateur connaît le programme et les pics repas), renforts
+# FoodCourt planifiés aux heures de repas, retour au poste après chaque
+# incident — mais détection HUMAINE (un agent doit voir l'incident puis le
+# signaler par radio) et aucun ajustement à la demande réelle du jour.
+# On mesure l'écart : c'est la valeur du TEMPS RÉEL, pas celle d'un strawman.
 #
 # Sources des paramètres (voir docs/ab-demo.md) : cibles médicales de
 # rassemblement de masse (BLS 4 min / ALS 8 min — StatPearls/NIH), ratios de
