@@ -279,32 +279,40 @@ STAFF_POSTS = {z: _staff_posts(z) for z in C.ZONES}
 # en files serpentines DEVANT ces fenêtres (cf. replay_sim `_food_queue`).
 # ---------------------------------------------------------------------------
 def _food_stalls():
+    """7 stands, ALIGNÉS sur ceux dessinés par le lecteur (`drawFoodStalls`) :
+    rangée AVANT (4 stands, haut de zone, fx ∈ {0.16,0.38,0.62,0.84}) + rangée
+    ARRIÈRE (3 stands, bas de zone, fx ∈ {0.24,0.5,0.76})."""
     x0, y0, x1, y1 = ZONE_BBOX["FoodCourt"]
-    return [(x0 + (x1 - x0) * fx, y0 + 10.0) for fx in (0.16, 0.38, 0.62, 0.84)]
+    front = [(x0 + (x1 - x0) * fx, y0 + 10.0) for fx in (0.16, 0.38, 0.62, 0.84)]
+    back = [(x0 + (x1 - x0) * fx, y1 - 26.0) for fx in (0.24, 0.5, 0.76)]
+    return front, back
 
 
-FOOD_STALLS = _food_stalls()
+FOOD_STALLS_FRONT, FOOD_STALLS_BACK = _food_stalls()
+FOOD_STALLS = FOOD_STALLS_FRONT + FOOD_STALLS_BACK      # 7 au total
 
 
-def food_queue_slots(n, row_gap=12.0, head_dy=22.0):
-    """Emplacements de file (serpentine) devant les stands : une allée par stand
-    (rangée avant), la tête de file au plus près de la fenêtre, la queue qui
-    descend vers la plaza. Retourne les `n` premiers créneaux (tête d'abord)."""
+def food_queue_slots(n, row_gap=9.5, head_dy=16.0):
+    """Emplacements de file devant les 7 stands : une file SERRÉE par stand, la
+    tête au plus près de la fenêtre, la queue qui s'étire VERS LA PLAZA — les 4
+    stands de la rangée AVANT ont leur file qui DESCEND, les 3 de la rangée
+    ARRIÈRE une file qui MONTE (les deux convergent vers le centre). Remplissage
+    en round-robin -> les 7 files grandissent de front, rang par rang. Retourne
+    les `n` premiers créneaux (têtes d'abord)."""
     x0, y0, x1, y1 = ZONE_BBOX["FoodCourt"]
-    lanes = [sx for sx, _ in FOOD_STALLS]
-    y_head = FOOD_STALLS[0][1] + head_dy
-    y_max = y1 - 12.0
+    lanes = ([(sx, sy + head_dy, 1.0) for sx, sy in FOOD_STALLS_FRONT]
+             + [(sx, sy - head_dy, -1.0) for sx, sy in FOOD_STALLS_BACK])
+    y_lo, y_hi = y0 + 14.0, y1 - 14.0
     slots, row = [], 0
-    while len(slots) < n:
-        y = y_head + row * row_gap
-        if y > y_max:
-            break
-        for lx in lanes:
-            slots.append((lx, y))
-            if len(slots) >= n:
-                break
+    while len(slots) < n and row < 60:
+        for (lx, ly, dirn) in lanes:
+            y = ly + dirn * row * row_gap
+            if y_lo <= y <= y_hi:
+                slots.append((lx, y))
+                if len(slots) >= n:
+                    break
         row += 1
-    return slots
+    return slots[:n]
 
 
 def _intra_zone_min(zone):

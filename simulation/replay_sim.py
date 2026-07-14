@@ -438,21 +438,33 @@ class ReplayEngine:
         self._food_queue(step, f)      # aligne la file devant les stands FoodCourt
 
     def _food_queue(self, step, f):
-        """Aligne des points FoodCourt en file serpentine devant les stands, à
-        hauteur de la file d'attente MESURÉE par l'évaluateur (fc_queue). Les
-        points en file ne flânent quasiment plus (ils patientent)."""
+        """Aligne les points FoodCourt en files SERRÉES devant les 7 stands
+        pendant les pics de repas. Le nombre en file suit l'INTENSITÉ D'APPÉTIT
+        (au dîner la quasi-totalité de la foule patiente aux stands), avec au
+        minimum la file MESURÉE par l'évaluateur (fc_queue). Les points en file
+        ne flânent quasiment plus (ils patientent). Hors repas : personne en file
+        (la foule flâne au centre, via _repack)."""
         fc = [d for d in self.dots if d.state == "idle" and d.zone == "FoodCourt"]
         for d in fc:
             d.queued = False
-        n_q = int(round(self.fc_queue.get(step, 0) / self.scale))
-        if n_q <= 0 or not fc:
+        if not fc:
             return
-        n_q = min(n_q, len(fc), 48)
+        minute = (step % C.STEPS_PER_DAY) * C.STEP_MINUTES + C.STEP_MINUTES / 2
+        meal = _meal_intensity(minute)
+        n_meas = int(round(self.fc_queue.get(step, 0) / self.scale))
+        # part de la foule VISUELLEMENT aux stands au pic (demande de repas) ;
+        # jamais moins que la file résiduelle mesurée.
+        n_visual = int(min(0.85, 0.10 + 0.95 * meal) * len(fc))
+        n_q = min(len(fc), max(n_meas, n_visual))
+        if n_q <= 0:
+            return
         slots = G.food_queue_slots(n_q)
         fc.sort(key=lambda d: d.id)                 # ordre stable (file peu mouvante)
         for d, (sx, sy) in zip(fc, slots):
             d.queued = True
-            d.rx, d.ry = sx, sy
+            # micro-jitter horizontal déterministe (file organique mais serrée)
+            d.rx = sx + ((d.id * 0.6180339 % 1.0) - 0.5) * 5.0
+            d.ry = sy
 
     # ---- foule dynamique : migrations internes + files au col ----
     def _update_crowd(self, step, f):
@@ -545,37 +557,21 @@ class ReplayEngine:
             x0, y0, x1, y1 = G.ZONE_BBOX[z]
             poly = G.ZONE_SHAPES[z]
             conc = _concert_pop(z, minute) if z in ("MainStage", "SecondStage") else 0.0
-            meal = _meal_intensity(minute) if z == "FoodCourt" else 0.0
             P = np.empty((len(group), 2))
             if conc > 0:
-                # CONCERT EN COURS : bande ANISOTROPE pressée contre le devant de
-                # scène (toute la largeur, profondeur qui se comprime avec la
-                # densité) — la foule se masse DEVANT la scène, pas au milieu.
+                # CONCERT EN COURS : la foule se masse en bande compacte CONTRE le
+                # devant de scène (bord haut de la zone, `stageGeom.front = y0+6`),
+                # tassée au plus près de la barrière et s'estompant vers l'arrière.
                 cx = (x0 + x1) / 2.0
-                halfw = (x1 - x0) / 2.0 - 12.0
-                ymax = y1 - 10.0
+                halfw = (x1 - x0) / 2.0 - 20.0            # resserré horizontalement
+                y_front = y0 + (y1 - y0) * 0.05           # JUSTE sous la scène
+                band = (y1 - y0) * (0.30 + 0.26 * dens)   # bande compacte (croît un peu)
+                y_back = min(y1 - 10.0, y_front + band)
                 for k, d in enumerate(group):
-                    xoff = (d.ang / np.pi) - 1.0          # étalement uniforme [-1,1)
-                    depth = d.u ** gamma                   # dense -> pressé au front
-                    P[k, 0] = cx + xoff * halfw * (1.0 - 0.30 * depth)
-                    P[k, 1] = fy + depth * (ymax - fy)
-            elif meal > 0.15:
-                # PIC REPAS : la majorité de la foule s'aligne en COLONNES devant
-                # les 4 stands (files longues et lisibles) ; le reste flâne en plaza.
-                lanes = G.FOOD_STALLS
-                y_head = lanes[0][1] + 20.0
-                ymax = y1 - 10.0
-                q_share = min(0.9, 0.35 + 0.75 * meal)     # part de la foule en file
-                for k, d in enumerate(group):
-                    h = (d.ang * 7.9177) % 1.0             # tirage stable par point
-                    if h < q_share:
-                        lane = int(((d.ang * 3.313) % 1.0) * len(lanes)) % len(lanes)
-                        P[k, 0] = lanes[lane][0] + (((d.ang * 11.71) % 1.0) - 0.5) * 16.0
-                        P[k, 1] = y_head + (d.u ** 1.1) * (ymax - y_head)
-                    else:
-                        r = R * (d.u ** gamma)
-                        P[k, 0] = fx + np.cos(d.ang) * r
-                        P[k, 1] = fy + np.sin(d.ang) * r
+                    xoff = (d.ang / np.pi) - 1.0           # étalement uniforme [-1,1)
+                    depth = d.u ** (gamma * 1.35)          # fortement tassé au front
+                    P[k, 0] = cx + xoff * halfw * (1.0 - 0.16 * depth)
+                    P[k, 1] = y_front + depth * (y_back - y_front)
             else:
                 for k, d in enumerate(group):
                     r = R * (d.u ** gamma)
